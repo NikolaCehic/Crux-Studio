@@ -10,6 +10,11 @@ The Studio codebase is separate from `crux-harness`. It consumes the harness thr
 
 ```text
 crux-studio/
+  apps/
+    web/          # React UI
+    server/       # Fastify BFF, owns harness provider adapters
+  packages/
+    crux-provider # Provider contract shared by server/UI types
   docs/
     PRODUCT_SPEC.md
     UX_SPEC.md
@@ -17,16 +22,23 @@ crux-studio/
     PHASED_PLAN.md
 ```
 
-The planned implementation codebase:
+## Current Implementation
 
 ```text
 crux-studio/
   apps/
-    web/          # React UI
-    server/       # Node BFF, owns harness provider adapters
+    web/
+      src/App.tsx
+      src/api.ts
+      src/styles.css
+    server/
+      src/app.ts
+      src/provider.ts
+      src/providers/local-crux-provider.ts
   packages/
-    crux-provider # Provider contract shared by server/UI types
-    ui            # Studio component system
+    crux-provider/
+      src/types.ts
+      src/mock.ts
 ```
 
 ## Best Integration Model
@@ -53,6 +65,55 @@ For local development, `crux-studio` can depend on:
 
 For production, that provider can later point at a hosted Crux API or a packaged harness release.
 
+## Run Locally
+
+Install dependencies:
+
+```bash
+pnpm install
+```
+
+Run with the fast mock provider:
+
+```bash
+pnpm dev
+```
+
+Open:
+
+```text
+http://127.0.0.1:5173
+```
+
+Run with the real local harness provider:
+
+```bash
+CRUX_STUDIO_PROVIDER=local \
+CRUX_HARNESS_ROOT=/Users/nikolacehic/Desktop/crux-harness \
+pnpm --filter @crux-studio/server dev
+```
+
+In another terminal:
+
+```bash
+pnpm --filter @crux-studio/web dev
+```
+
+## Quality Commands
+
+```bash
+pnpm test
+pnpm check
+pnpm build
+```
+
+## Traceability
+
+- Implementation trace: [docs/TRACE_LOG.md](docs/TRACE_LOG.md)
+- Product changelog: [CHANGELOG.md](CHANGELOG.md)
+- Product context: [PRODUCT.md](PRODUCT.md)
+- Design context: [DESIGN.md](DESIGN.md)
+
 ## Core Product Loop
 
 ```text
@@ -75,4 +136,3 @@ Ask question
 - [UX Spec](docs/UX_SPEC.md)
 - [Architecture Spec](docs/ARCHITECTURE_SPEC.md)
 - [Phased Plan](docs/PHASED_PLAN.md)
-

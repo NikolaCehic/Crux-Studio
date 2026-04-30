@@ -1,0 +1,101 @@
+import { describe, expect, it } from "vitest";
+import { LocalCruxHarnessProvider } from "./local-crux-provider";
+
+describe("LocalCruxHarnessProvider", () => {
+  it("maps harness query output and artifact bundle into the Studio provider contract", async () => {
+    const provider = new LocalCruxHarnessProvider({
+      projectRoot: "/workspace/crux-harness",
+      driver: {
+        async runQuery(_projectRoot, question, options) {
+          return {
+            runId: "20260501T100000Z-support",
+            runDir: "/workspace/crux-harness/runs/20260501T100000Z-support",
+            generatedInputPath:
+              "/workspace/crux-harness/runs/query-inputs/20260501T100000Z-support.yaml",
+            intake: {
+              original_query: question,
+              analysis_scope: "general-analysis",
+              intent: "decision",
+              risk_level: "medium",
+              answerability: options.context ? "answerable" : "answerable_with_assumptions",
+              source_policy: options.sourcePolicy,
+            },
+          };
+        },
+        async loadRunArtifactBundle() {
+          return {
+            run_dir: "runs/20260501T100000Z-support",
+            question_spec: {
+              question: "How should support reduce first-response time?",
+            },
+            decision_memo:
+              "## Recommendation\n\nReduce response time by triaging queues and measuring daily movement.",
+            eval_report: {
+              council: {
+                synthesis: {
+                  status: "fail",
+                  confidence: 0.55,
+                  blocking_failures: ["Source policy hybrid requires evidence."],
+                },
+              },
+              diagnostics: [],
+            },
+            claims: { claims: [] },
+            evidence: { evidence: [] },
+            contradictions: { contradictions: [] },
+            uncertainty: { confidence: 0.55 },
+            trace: [],
+            relationships: {},
+          };
+        },
+        async writeRunReport() {
+          return "runs/20260501T100000Z-support/run_report.html";
+        },
+        async listRunDirs() {
+          return ["runs/20260501T100000Z-support"];
+        },
+      },
+    });
+
+    const run = await provider.ask({
+      question: "How should support reduce first-response time?",
+      context: "No hiring this month.",
+      sourcePolicy: "hybrid",
+    });
+
+    expect(run).toEqual(
+      expect.objectContaining({
+        runId: "20260501T100000Z-support",
+        runDir: "runs/20260501T100000Z-support",
+        question: "How should support reduce first-response time?",
+        trust: {
+          status: "fail",
+          confidence: 0.55,
+          blockingIssues: ["Source policy hybrid requires evidence."],
+        },
+        paths: expect.objectContaining({
+          generatedInput:
+            "runs/query-inputs/20260501T100000Z-support.yaml",
+          decisionMemo: "runs/20260501T100000Z-support/decision_memo.md",
+          htmlReport: "runs/20260501T100000Z-support/run_report.html",
+        }),
+      }),
+    );
+
+    await expect(provider.getRun(run.runId)).resolves.toEqual(
+      expect.objectContaining({
+        runId: run.runId,
+        artifacts: expect.objectContaining({
+          claims: { claims: [] },
+          evidence: { evidence: [] },
+          trace: [],
+        }),
+      }),
+    );
+
+    await expect(provider.listRuns()).resolves.toEqual([
+      expect.objectContaining({ runId: "20260501T100000Z-support" }),
+    ]);
+  });
+});
+
