@@ -175,11 +175,13 @@ v0.2:
 
 - add SQLite for projects, run metadata, source pack metadata, and user annotations
 
-Hosted:
+Deferred beyond this Studio stage:
 
-- Postgres
-- object storage for artifacts
-- queue-backed runs
+- hosted database
+- external artifact storage
+- queue-backed multi-user run execution
+
+These are intentionally not part of the current Crux Studio roadmap.
 
 ## Security And Safety
 
@@ -203,4 +205,3 @@ Vite React plus Fastify gives clearer separation:
 - provider adapters stay testable
 
 This is the most optimal architecture because it preserves Crux Harness as the core engine while letting Studio become a real product surface.
-

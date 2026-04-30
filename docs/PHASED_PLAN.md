@@ -184,13 +184,13 @@ Acceptance:
 
 Optimality:
 
-This is the platform expansion point. It should happen after the Studio proves the core run UX.
+This is the platform expansion point. It should happen after the Studio proves the core run UX. It keeps expansion focused on better runs and better sources, not hosted team administration.
 
-## Phase 8: Hosted Control Plane
+## Explicitly Out Of Scope For This Stage
 
-Goal: make Studio team-ready.
+Crux Studio should not include a hosted control plane in this roadmap stage.
 
-Scope:
+Deferred:
 
 - auth
 - teams
@@ -201,15 +201,9 @@ Scope:
 - deployment observability
 - audit logs
 
-Acceptance:
+Reason:
 
-- teams can safely use Studio together
-- runs and artifacts are persisted outside the file system
-- permissions protect projects and sources
-
-Optimality:
-
-This is the right hosted phase because it comes after the product workflow is worth sharing across a team.
+Those features make Studio team-ready, but they do not improve the core run loop yet. The current priority is a great single-user/product workflow around asking, inspecting, sourcing, reviewing, rerunning, and comparing Crux runs.
 
 ## Final Convergence
 
@@ -220,7 +214,6 @@ The best first build is:
 3. Phase 2: artifact inspector
 4. Phase 3: source workspace
 
-That sequence gives Crux Studio a real product spine before expanding into collaboration, connectors, or hosted infrastructure.
+That sequence gives Crux Studio a real product spine before expanding into connectors or deeper agent integrations.
 
 I do not know a better phased plan because this order follows the actual trust loop of the harness: create a run, understand it, fix it, then scale it.
-
