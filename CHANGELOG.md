@@ -10,6 +10,7 @@
 - Added Studio UI controls for provider capabilities, project selection, source pack creation, source-backed runs, claim review, evidence annotation, replay, comparison, and reviewed memo export.
 - Added TDD coverage for the complete product workflow across provider, server, and web layers.
 - Added `.studio/` to ignored local runtime state.
+- Reworked the README as a product showcase with real Studio screenshots.
 
 ## 0.1.0 - 2026-05-01
 

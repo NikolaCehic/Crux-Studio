@@ -198,3 +198,24 @@ Verification:
 Result:
 
 - Source packs are now real local analysis inputs, not just labels or metadata.
+
+## 2026-05-01T02:36:58+02:00 - README Product Showcase
+
+Intent:
+
+- Turn the README into a clear product showcase with real screenshots from the running Studio.
+
+Implemented:
+
+- Captured desktop screenshots of the Studio workbench, claim review surface, reviewed memo area, and run comparison surface.
+- Added screenshot assets under `docs/assets/`.
+- Rewrote `README.md` with product positioning, product tour, workflow, capabilities, local run instructions, architecture, quality commands, non-hosted boundary, and traceability links.
+
+Verification:
+
+- Loaded Studio in the browser and verified the screenshot state before capture.
+- Verified generated image dimensions and file metadata.
+
+Result:
+
+- The repository now presents Crux Studio as a visible product, not just an implementation scaffold.
