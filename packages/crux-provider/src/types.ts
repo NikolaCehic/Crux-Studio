@@ -65,6 +65,7 @@ export type TraceEvent = {
 };
 
 export type RunBundle = RunSummary & {
+  memo: string;
   artifacts: {
     queryIntake?: unknown;
     claims?: unknown;

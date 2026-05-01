@@ -180,6 +180,7 @@ export class LocalCruxHarnessProvider implements CruxProvider {
 
     return {
       ...summary,
+      memo: harnessBundle.decision_memo ?? "",
       artifacts: {
         queryIntake: intake,
         claims: harnessBundle.claims,
@@ -262,4 +263,3 @@ function excerptMemo(memo: string): string {
 
   return `${trimmed.slice(0, 1597)}...`;
 }
-

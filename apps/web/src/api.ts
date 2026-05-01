@@ -1,4 +1,4 @@
-import type { AskInput, RunSummary } from "@crux-studio/crux-provider";
+import type { AskInput, RunBundle, RunSummary } from "@crux-studio/crux-provider";
 
 export async function askCrux(input: AskInput): Promise<RunSummary> {
   const response = await fetch("/api/runs/ask", {
@@ -15,3 +15,22 @@ export async function askCrux(input: AskInput): Promise<RunSummary> {
   return (await response.json()) as RunSummary;
 }
 
+export async function listRuns(): Promise<RunSummary[]> {
+  const response = await fetch("/api/runs");
+
+  if (!response.ok) {
+    throw new Error("Run history failed to load.");
+  }
+
+  return (await response.json()) as RunSummary[];
+}
+
+export async function getRun(runId: string): Promise<RunBundle> {
+  const response = await fetch(`/api/runs/${runId}`);
+
+  if (!response.ok) {
+    throw new Error("Run bundle failed to load.");
+  }
+
+  return (await response.json()) as RunBundle;
+}

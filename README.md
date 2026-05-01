@@ -107,6 +107,16 @@ pnpm check
 pnpm build
 ```
 
+## Current Product Capabilities
+
+- Ask arbitrary questions from the Studio UI.
+- See memo preview, trust gate, confidence, answerability, risk, blocking issues, and artifact paths.
+- Load run history from the server.
+- Fetch full run bundles after creating or selecting a run.
+- Inspect Memo, Claims, Evidence, Contradictions, Uncertainty, Council, Diagnostics, and Trace tabs.
+- Open raw Claims, Evidence, and Trace JSON.
+- Export the memo as Markdown.
+
 ## Traceability
 
 - Implementation trace: [docs/TRACE_LOG.md](docs/TRACE_LOG.md)

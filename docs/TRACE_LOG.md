@@ -80,3 +80,48 @@ Notes:
 - The UI defaults to the mock provider for fast product iteration.
 - The local provider can index existing Crux Harness runs and can run new analyses through the server adapter.
 - Browser code still imports only shared contract types, never harness internals.
+
+## 2026-05-01T02:00:24+02:00 - Inspector Acceptance Red Step
+
+Command:
+
+- `pnpm test`
+
+Result:
+
+- Expected failure.
+- Server acceptance test failed because `/api/runs/:runId/artifacts/:artifact` and `/api/runs/:runId/export/memo` are not implemented yet.
+
+Acceptance target:
+
+- User can inspect core run artifacts in the browser.
+- User can export the memo.
+- UI can load run history and fetch full run bundles after run creation.
+
+## 2026-05-01T02:05:22+02:00 - Inspector Acceptance Green Slice
+
+Implemented:
+
+- Added `memo` to the normalized `RunBundle` contract.
+- Added safe server routes:
+  - `GET /api/runs/:runId/artifacts/:artifactName`
+  - `GET /api/runs/:runId/export/memo`
+- Added raw artifact whitelist for memo, query intake, claims, evidence, contradictions, uncertainty, council, diagnostics, and trace.
+- Added web API helpers for listing runs and fetching full run bundles.
+- Added run history in the left rail.
+- Added artifact tabs for Memo, Claims, Evidence, Contradictions, Uncertainty, Council, Diagnostics, and Trace.
+- Added memo export action and raw Claims/Evidence/Trace JSON links.
+
+Verification:
+
+- `pnpm test` passed.
+- `pnpm check` passed.
+- `pnpm build` passed.
+- Live API smoke passed after restarting the dev server:
+  - `POST /api/runs/ask`
+  - `GET /api/runs/:runId/artifacts/claims`
+  - `GET /api/runs/:runId/export/memo`
+
+Result:
+
+- Crux Studio now satisfies the core v0.1 inspection acceptance loop for mock-provider development and the same UI contract is backed by the local harness provider.

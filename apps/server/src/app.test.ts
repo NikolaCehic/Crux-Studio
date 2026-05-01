@@ -54,6 +54,51 @@ describe("Studio run API", () => {
     );
   });
 
+  it("returns safe inspectable artifacts and memo export for a run", async () => {
+    const provider = new MockCruxProvider({
+      now: () => "2026-05-01T10:00:00.000Z",
+    });
+    const app = buildServer({ provider });
+    apps.push(app);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/runs/ask",
+      payload: {
+        question: "Should operations automate warehouse slotting?",
+        sourcePolicy: "offline",
+      },
+    });
+    const run = created.json();
+
+    const claims = await app.inject({
+      method: "GET",
+      url: `/api/runs/${run.runId}/artifacts/claims`,
+    });
+    expect(claims.statusCode).toBe(200);
+    expect(claims.json()).toEqual(
+      expect.objectContaining({
+        claims: expect.arrayContaining([
+          expect.objectContaining({ id: "claim-1" }),
+        ]),
+      }),
+    );
+
+    const memo = await app.inject({
+      method: "GET",
+      url: `/api/runs/${run.runId}/export/memo`,
+    });
+    expect(memo.statusCode).toBe(200);
+    expect(memo.headers["content-type"]).toContain("text/markdown");
+    expect(memo.body).toContain("## Recommendation");
+
+    const unsafe = await app.inject({
+      method: "GET",
+      url: `/api/runs/${run.runId}/artifacts/../../package.json`,
+    });
+    expect(unsafe.statusCode).toBe(404);
+  });
+
   it("rejects empty questions before reaching the provider", async () => {
     const provider = new MockCruxProvider();
     const app = buildServer({ provider });
@@ -72,4 +117,3 @@ describe("Studio run API", () => {
     await expect(provider.listRuns()).resolves.toHaveLength(0);
   });
 });
-

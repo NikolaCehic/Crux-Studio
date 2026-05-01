@@ -60,6 +60,7 @@ export class MockCruxProvider implements CruxProvider {
 
     const bundle: RunBundle = {
       ...summary,
+      memo: summary.memoPreview,
       artifacts: {
         queryIntake: {
           question,
@@ -200,4 +201,3 @@ The current run is useful as a structured draft. It should become a trusted reco
 3. Rerun Crux and compare trust movement.`;
   }
 }
-
