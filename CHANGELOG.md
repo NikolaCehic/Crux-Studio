@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1 - 2026-05-01
+
+- Audited the app against the Desktop `Crux Studio_Design` reference and Impeccable product/design criteria.
+- Reworked the Studio shell toward the reference workbench: brand lockup, workspace nav, status breadcrumb, segmented source policy, attachment-style source area, and denser inspector surfaces.
+- Moved the web styling onto the Crux design tokens from the design folder.
+- Fixed responsive clipping and cramped mobile navigation in narrow browser viewports.
+- Made desktop side rails sticky and internally scrollable so trust, history, and current-run context stay available while the workbench scrolls.
+- Hardened artifact-row layout so claim and evidence review actions cannot collide with long analysis text.
+- Updated the primary README screenshot from the polished running app.
+
 ## 0.2.0 - 2026-05-01
 
 - Added local Studio persistence for projects, source packs, run links, and human review state.

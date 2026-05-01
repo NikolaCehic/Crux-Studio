@@ -1,5 +1,54 @@
 # Trace Log
 
+## 2026-05-01T11:02:00+02:00 - Impeccable Design Audit And Polish
+
+Intent:
+
+- Audit the running Studio against the Desktop `Crux Studio_Design` reference.
+- Apply the Impeccable product/design/polish criteria without changing the provider boundary or hosted-control-plane scope.
+- Keep every change traceable and verified.
+
+Reference material read:
+
+- `/Users/nikolacehic/Desktop/Crux Studio_Design/tokens.css`
+- `/Users/nikolacehic/Desktop/Crux Studio_Design/studio-app.jsx`
+- `/Users/nikolacehic/Desktop/Crux Studio_Design/studio-atoms.jsx`
+- `/Users/nikolacehic/Desktop/Crux Studio_Design/studio-views-1.jsx`
+- `/Users/nikolacehic/Desktop/Crux Studio_Design/studio-views-2.jsx`
+- `/Users/nikolacehic/Desktop/Crux Studio_Design/screenshots/studio-ask.png`
+
+Audit findings:
+
+- Current implementation worked but did not yet match the reference workbench shell, breadcrumb/status treatment, or token discipline.
+- Source policy behaved like a basic select instead of the expected segmented control.
+- Artifact rows could crowd claim/evidence text and action buttons in narrow columns.
+- Mobile/narrow browser rendering clipped because the document enforced a 320px minimum width.
+- Desktop side rails could drift below the first viewport when the central workbench was taller than the viewport.
+
+Implemented:
+
+- Added the reference-style brand lockup, workspace navigation labels, status breadcrumb, and active provider handling.
+- Replaced the source-policy select with an accessible segmented fieldset.
+- Ported the core Crux design tokens into the app stylesheet and rebalanced surfaces, borders, badges, form controls, memo copy, inspector sections, and tabs around them.
+- Reworked artifact rows into stable grid layouts with mobile-safe action stacking.
+- Added responsive fixes for narrow rail navigation, wrapping breadcrumbs, and body overflow.
+- Made desktop side rails sticky with internal scrolling, resetting to normal document flow on tablet/mobile layouts.
+- Updated the web workflow test to assert the project selector and status surface explicitly.
+- Refreshed `docs/assets/crux-studio-workbench.png` from the running polished app.
+
+Verification:
+
+- `pnpm test -- --runInBand` passed.
+- `pnpm check` passed.
+- `pnpm build` passed.
+- Browser visual check passed on the narrow in-app viewport.
+- Browser sample run passed through memo, Claims tab, claim review controls, and review summary without overlap.
+- 1440px Chrome screenshot captured and reviewed for desktop layout, sticky rails, tokenized shell, and readable first viewport.
+
+Result:
+
+- The Studio UI now aligns with the approved design reference as a calm, dense, auditable analysis workbench.
+
 ## 2026-05-01T01:35:49+02:00 - Phase 0/1 Start
 
 Intent:

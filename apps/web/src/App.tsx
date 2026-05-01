@@ -61,6 +61,13 @@ const initialForm: AskFormState = {
 };
 
 const formatConfidence = (value: number) => `${Math.round(value * 100)}%`;
+const policyHelp: Record<SourcePolicy, string> = {
+  offline: "Draft with local context only. Treat source-free output as untrusted.",
+  hybrid: "Use attached source packs first, then provider context when available.",
+  web: "Connector-ready mode for providers that can resolve live sources.",
+};
+
+const policyOptions: SourcePolicy[] = ["offline", "hybrid", "web"];
 
 export function App() {
   const [form, setForm] = useState<AskFormState>(initialForm);
@@ -84,6 +91,9 @@ export function App() {
   const [isLoadingBundle, setIsLoadingBundle] = useState(false);
 
   const selectedRun = bundle ?? run;
+  const activeProvider = providers[0];
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+  const selectedSourcePack = sourcePacks.find((pack) => pack.id === selectedSourcePackId);
   const canRun = form.question.trim().length > 0 && !isRunning;
   const memoText = bundle?.memo ?? run?.memoPreview ?? "";
   const memoSections = useMemo(() => memoText.split("\n\n").filter(Boolean), [memoText]);
@@ -297,25 +307,27 @@ export function App() {
   return (
     <main className="studio-shell">
       <aside className="left-rail" aria-label="Workspace navigation">
-        <div>
-          <p className="eyebrow">Workspace</p>
-          <h1>Crux Studio</h1>
+        <div className="brand-lockup">
+          <CruxMark />
+          <div>
+            <h1>Crux Studio</h1>
+            <p className="brand-meta">v0.2 · local</p>
+          </div>
         </div>
         <nav className="rail-nav" aria-label="Run sections">
-          <a aria-current="page" href="#ask">
-            Ask
-          </a>
-          <a href="#memo">Memo</a>
+          <p className="rail-label">Workspace</p>
+          <a aria-current="page" href="#ask">New run</a>
+          <a href="#memo">Current run</a>
           <a href="#artifacts">Artifacts</a>
           <a href="#trace">Trace</a>
         </nav>
         <section className="history-panel" aria-label="Run history">
           <p className="provider-line">
-            Provider: {providers[0]?.id ?? "unknown"}
+            Provider: {activeProvider?.id ?? "unknown"}
           </p>
-          {providers[0]?.capabilities.length ? (
+          {activeProvider?.capabilities.length ? (
             <div className="provider-capabilities" aria-label="Provider capabilities">
-              {providers[0].capabilities.map((capability) => (
+              {activeProvider.capabilities.map((capability) => (
                 <span key={capability}>{capability}</span>
               ))}
             </div>
@@ -336,7 +348,8 @@ export function App() {
                     void loadBundle(item.runId);
                   }}
                 >
-                  <span>{item.runId}</span>
+                  <span>{item.question}</span>
+                  <em>{item.runId}</em>
                   <small>{item.trust.status}</small>
                 </button>
               ))}
@@ -389,166 +402,186 @@ export function App() {
         </div>
       </aside>
 
-      <section className="workspace" id="ask">
-        <form className="ask-panel" onSubmit={handleSubmit}>
-          <div className="section-heading">
-            <p className="eyebrow">Ask</p>
-            <h2>New analysis run</h2>
-          </div>
-
-          <label className="field">
-            <span>Question</span>
-            <textarea
-              id="question"
-              name="question"
-              rows={4}
-              value={form.question}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, question: event.target.value }))
-              }
-              placeholder="How should a support team reduce first-response time without hiring more agents this month?"
-            />
-          </label>
-
-          <label className="field">
-            <span>Context</span>
-            <textarea
-              id="context"
-              name="context"
-              rows={3}
-              value={form.context}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, context: event.target.value }))
-              }
-              placeholder="Constraints, goals, tradeoffs, stakeholders"
-            />
-          </label>
-
-          <div className="field-grid">
-            <label className="field">
-              <span>Time horizon</span>
-              <input
-                id="timeHorizon"
-                name="timeHorizon"
-                value={form.timeHorizon}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    timeHorizon: event.target.value,
-                  }))
-                }
-              />
-            </label>
-
-            <label className="field">
-              <span>Source policy</span>
-              <select
-                id="sourcePolicy"
-                name="sourcePolicy"
-                value={form.sourcePolicy}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    sourcePolicy: event.target.value as SourcePolicy,
-                  }))
-                }
-              >
-                <option value="offline">offline</option>
-                <option value="hybrid">hybrid</option>
-                <option value="web">web</option>
-              </select>
-            </label>
-          </div>
-
-          <label className="field">
-            <span>Source pack</span>
-            <select
-              aria-label="Source pack"
-              value={selectedSourcePackId}
-              onChange={(event) => setSelectedSourcePackId(event.target.value)}
-            >
-              <option value="">No source pack</option>
-              {visibleSourcePacks.map((pack) => (
-                <option key={pack.id} value={pack.id}>
-                  {pack.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="source-builder">
-            <label className="field">
-              <span>New source pack</span>
-              <input
-                value={sourcePackName}
-                onChange={(event) => setSourcePackName(event.target.value)}
-              />
-            </label>
-            <label className="field">
-              <span>Source content</span>
-              <textarea
-                rows={4}
-                value={sourceDraft}
-                onChange={(event) => setSourceDraft(event.target.value)}
-              />
-            </label>
-            <button type="button" onClick={() => void handleCreateSourcePack()}>
-              Create source pack
-            </button>
-          </div>
-
-          {error ? <p className="form-error">{error}</p> : null}
-
-          <div className="form-actions">
-            <button type="submit" disabled={!canRun}>
-              {isRunning ? "Running" : "Run Crux"}
-            </button>
-          </div>
-        </form>
-
-        <article className="memo-panel" id="memo" aria-live="polite">
-          <div className="section-heading with-action">
-            <div>
-              <p className="eyebrow">Memo</p>
-              <h2>{selectedRun ? "Decision memo" : "No run yet"}</h2>
-            </div>
-            {selectedRun ? (
-              <div className="memo-actions">
-                <a className="text-action" href={`/api/runs/${selectedRun.runId}/export/memo`}>
-                  Export memo
-                </a>
-                <button type="button" onClick={() => void handleReplay()}>
-                  Replay run
-                </button>
-                <button type="button" onClick={() => void handleCompareLatest()}>
-                  Compare latest
-                </button>
-              </div>
+      <section className="studio-main">
+        <header className="topbar" aria-label="Workspace status">
+          <div>
+            <span>workspace</span>
+            <span>/</span>
+            <strong>{selectedProject?.name ?? "No project"}</strong>
+            {selectedSourcePack ? (
+              <>
+                <span>/</span>
+                <strong>{selectedSourcePack.name}</strong>
+              </>
             ) : null}
           </div>
+          <p>harness engine ready</p>
+        </header>
 
-          {selectedRun ? (
-            <>
-              <div className="memo-copy">
-                {memoSections.map((section) => renderMemoSection(section))}
-              </div>
-              <ArtifactInspector
-                activeTab={activeTab}
-                bundle={bundle}
-                isLoading={isLoadingBundle}
-                onAnnotateEvidence={handleAnnotateEvidence}
-                onChangeTab={setActiveTab}
-                onReviewClaim={handleReviewClaim}
+        <section className="workspace" id="ask">
+          <form className="ask-panel" onSubmit={handleSubmit}>
+            <div className="section-heading">
+              <p className="eyebrow">New run · {selectedProject?.name ?? "workspace"}</p>
+              <h2>Ask a decision-grade question.</h2>
+            </div>
+
+            <label className="field">
+              <span>Question</span>
+              <textarea
+                id="question"
+                name="question"
+                rows={4}
+                value={form.question}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, question: event.target.value }))
+                }
+                placeholder="How should a support team reduce first-response time without hiring more agents this month?"
               />
-              <ReviewSummary review={review} runId={selectedRun.runId} />
-              {comparison ? <ComparisonSummary comparison={comparison} /> : null}
-            </>
-          ) : (
-            <p className="empty-copy">
-              Ask a question to create the first inspectable Crux run.
-            </p>
-          )}
-        </article>
+            </label>
+
+            <label className="field">
+              <span>Context</span>
+              <textarea
+                id="context"
+                name="context"
+                rows={3}
+                value={form.context}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, context: event.target.value }))
+                }
+                placeholder="Constraints, goals, tradeoffs, stakeholders"
+              />
+            </label>
+
+            <div className="field-grid">
+              <label className="field">
+                <span>Time horizon</span>
+                <input
+                  id="timeHorizon"
+                  name="timeHorizon"
+                  value={form.timeHorizon}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      timeHorizon: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              <fieldset className="source-policy" aria-label="Source policy">
+                <legend>Source policy</legend>
+                <div>
+                  {policyOptions.map((policy) => (
+                    <button
+                      aria-pressed={form.sourcePolicy === policy}
+                      key={policy}
+                      type="button"
+                      onClick={() =>
+                        setForm((current) => ({ ...current, sourcePolicy: policy }))
+                      }
+                    >
+                      {policy}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
+            <p className="help-copy">{policyHelp[form.sourcePolicy]}</p>
+
+            <label className="field">
+              <span>Source pack</span>
+              <select
+                aria-label="Source pack"
+                value={selectedSourcePackId}
+                onChange={(event) => setSelectedSourcePackId(event.target.value)}
+              >
+                <option value="">No source pack</option>
+                {visibleSourcePacks.map((pack) => (
+                  <option key={pack.id} value={pack.id}>
+                    {pack.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="source-builder" aria-label="Source attachment">
+              <label className="field">
+                <span>New source pack</span>
+                <input
+                  value={sourcePackName}
+                  onChange={(event) => setSourcePackName(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>Source content</span>
+                <textarea
+                  rows={4}
+                  value={sourceDraft}
+                  onChange={(event) => setSourceDraft(event.target.value)}
+                />
+              </label>
+              <button type="button" onClick={() => void handleCreateSourcePack()}>
+                Create source pack
+              </button>
+            </div>
+
+            {error ? <p className="form-error">{error}</p> : null}
+
+            <div className="form-actions">
+              <button type="submit" disabled={!canRun}>
+                {isRunning ? "Running" : "Run Crux"}
+              </button>
+            </div>
+          </form>
+
+          <article className="memo-panel" id="memo" aria-live="polite">
+            <div className="section-heading with-action">
+              <div>
+                <p className="eyebrow">Memo</p>
+                <h2>{selectedRun ? "Decision memo" : "No run yet"}</h2>
+              </div>
+              {selectedRun ? (
+                <div className="memo-actions">
+                  <a
+                    className="text-action"
+                    href={`/api/runs/${selectedRun.runId}/export/memo`}
+                  >
+                    Export memo
+                  </a>
+                  <button type="button" onClick={() => void handleReplay()}>
+                    Replay run
+                  </button>
+                  <button type="button" onClick={() => void handleCompareLatest()}>
+                    Compare latest
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            {selectedRun ? (
+              <>
+                <div className="memo-copy">
+                  {memoSections.map((section) => renderMemoSection(section))}
+                </div>
+                <ArtifactInspector
+                  activeTab={activeTab}
+                  bundle={bundle}
+                  isLoading={isLoadingBundle}
+                  onAnnotateEvidence={handleAnnotateEvidence}
+                  onChangeTab={setActiveTab}
+                  onReviewClaim={handleReviewClaim}
+                />
+                <ReviewSummary review={review} runId={selectedRun.runId} />
+                {comparison ? <ComparisonSummary comparison={comparison} /> : null}
+              </>
+            ) : (
+              <p className="empty-copy">
+                Ask a question to create the first inspectable Crux run.
+              </p>
+            )}
+          </article>
+        </section>
       </section>
 
       <aside className="right-inspector" aria-label="Run inspector">
@@ -625,6 +658,16 @@ export function App() {
         </section>
       </aside>
     </main>
+  );
+}
+
+function CruxMark() {
+  return (
+    <span className="crux-mark" aria-hidden="true">
+      <span />
+      <span />
+      <span />
+    </span>
   );
 }
 

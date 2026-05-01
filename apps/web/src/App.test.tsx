@@ -302,7 +302,10 @@ describe("Crux Studio Ask workflow", () => {
     render(<App />);
 
     expect(await screen.findByText("Provider: mock")).toBeInTheDocument();
-    expect(screen.getByText("Bakery Operations")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Project" })).toHaveDisplayValue(
+      "Bakery Operations",
+    );
+    expect(screen.getByText("harness engine ready")).toBeInTheDocument();
     expect(screen.getAllByText("Wholesale intake notes").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Create source pack" }));
