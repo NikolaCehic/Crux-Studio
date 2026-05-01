@@ -138,7 +138,7 @@ pnpm build
 9. Replay the run after improving context or source material.
 10. Compare the latest runs and export the reviewed memo.
 
-Local Studio state is written to `.studio/studio-state.json` by the server and is intentionally ignored by git.
+Local Studio state, including pasted source content, is written to `.studio/studio-state.json` by the server and is intentionally ignored by git.
 
 ## Non-Hosted Boundary
 

@@ -75,9 +75,16 @@ describe("Studio product workflow API", () => {
       url: `/api/runs/${run.runId}`,
     });
     expect(bundleResponse.statusCode).toBe(200);
-    expect(bundleResponse.json().artifacts.evidence.evidence[0].sourceType).toBe(
-      "source_pack",
+    const bundle = bundleResponse.json();
+    expect(bundle.artifacts.queryIntake.sourcePack.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "queue-notes.md",
+          content: expect.stringContaining("preventable intake errors"),
+        }),
+      ]),
     );
+    expect(bundle.artifacts.evidence.evidence[0].sourceType).toBe("source_pack");
 
     const reviewResponse = await app.inject({
       method: "POST",

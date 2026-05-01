@@ -81,7 +81,7 @@ export class LocalCruxHarnessProvider implements CruxProvider {
 
   async ask(input: AskInput): Promise<RunSummary> {
     const result = await this.driver.runQuery(this.projectRoot, input.question, {
-      context: [input.context, input.sourcePack ? `Studio source pack: ${input.sourcePack.name}` : undefined]
+      context: [input.context, formatSourcePackContext(input.sourcePack)]
         .filter(Boolean)
         .join("\n\n"),
       timeHorizon: input.timeHorizon,
@@ -238,6 +238,18 @@ function toTrustStatus(value: string | undefined): TrustStatus {
   }
 
   return "warn";
+}
+
+function formatSourcePackContext(sourcePack: AskInput["sourcePack"]) {
+  if (!sourcePack) {
+    return undefined;
+  }
+
+  const files = sourcePack.files
+    ?.map((file) => `### ${file.name}\n${file.content.trim().slice(0, 5000)}`)
+    .join("\n\n");
+
+  return [`Studio source pack: ${sourcePack.name}`, files].filter(Boolean).join("\n\n");
 }
 
 function stringField(source: Record<string, unknown>, field: string): string | undefined {

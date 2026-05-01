@@ -170,3 +170,31 @@ Verification:
 Result:
 
 - Crux Studio now supports the non-hosted product loop: ask, attach source context, inspect artifacts, review claims and evidence, replay, compare, and export a reviewed memo.
+
+## 2026-05-01T02:28:24+02:00 - Source Content Boundary Hardening
+
+Reason:
+
+- A final product review found that source packs were preserving metadata but not the source content needed by providers.
+
+TDD state:
+
+- Added failing provider, server, and local-provider tests proving source-pack content must cross the provider boundary.
+
+Implemented:
+
+- Added source-pack file content to the provider contract.
+- Persisted pasted source content in the local Studio store.
+- Passed source file content through server ask and replay paths.
+- Added source-pack file content to mock-provider query intake artifacts.
+- Appended source-pack file excerpts to local harness provider context.
+
+Verification:
+
+- `pnpm test` passed.
+- `pnpm check` passed.
+- `pnpm build` passed.
+
+Result:
+
+- Source packs are now real local analysis inputs, not just labels or metadata.

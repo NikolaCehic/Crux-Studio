@@ -55,15 +55,38 @@ describe("MockCruxProvider contract", () => {
         id: "source-pack-1",
         name: "Wholesale order evidence",
         sourceCount: 2,
+        files: [
+          {
+            name: "queue-notes.md",
+            content: "Wholesale email orders create preventable intake errors.",
+            contentHash: "hash-1",
+            size: 58,
+          },
+        ],
       },
     });
 
     expect(run.trust.status).toBe("pass");
     const bundle = await provider.getRun(run.runId);
+    expect(bundle.artifacts.queryIntake).toEqual(
+      expect.objectContaining({
+        sourcePack: expect.objectContaining({
+          files: expect.arrayContaining([
+            expect.objectContaining({
+              name: "queue-notes.md",
+              content: expect.stringContaining("preventable intake errors"),
+            }),
+          ]),
+        }),
+      }),
+    );
     expect(bundle.artifacts.evidence).toEqual(
       expect.objectContaining({
         evidence: expect.arrayContaining([
-          expect.objectContaining({ sourceType: "source_pack" }),
+          expect.objectContaining({
+            sourceType: "source_pack",
+            summary: expect.stringContaining("queue-notes.md"),
+          }),
         ]),
       }),
     );

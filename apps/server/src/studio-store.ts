@@ -17,6 +17,7 @@ export type StudioSourceFile = {
   extension: string;
   size: number;
   contentHash: string;
+  content: string;
 };
 
 export type StudioSourcePack = {
@@ -188,6 +189,7 @@ class MemoryStudioStore implements StudioStore {
         extension: path.extname(file.name).toLowerCase(),
         size: Buffer.byteLength(file.content, "utf8"),
         contentHash: createHash("sha256").update(file.content).digest("hex"),
+        content: file.content,
       })),
     };
     this.state.sourcePacks = upsertById(this.state.sourcePacks, sourcePack);

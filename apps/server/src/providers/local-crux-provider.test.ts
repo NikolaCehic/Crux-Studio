@@ -3,10 +3,12 @@ import { LocalCruxHarnessProvider } from "./local-crux-provider";
 
 describe("LocalCruxHarnessProvider", () => {
   it("maps harness query output and artifact bundle into the Studio provider contract", async () => {
+    let capturedContext = "";
     const provider = new LocalCruxHarnessProvider({
       projectRoot: "/workspace/crux-harness",
       driver: {
         async runQuery(_projectRoot, question, options) {
+          capturedContext = options.context ?? "";
           return {
             runId: "20260501T100000Z-support",
             runDir: "/workspace/crux-harness/runs/20260501T100000Z-support",
@@ -61,7 +63,24 @@ describe("LocalCruxHarnessProvider", () => {
       question: "How should support reduce first-response time?",
       context: "No hiring this month.",
       sourcePolicy: "hybrid",
+      sourcePack: {
+        id: "source-pack-1",
+        name: "Support queue notes",
+        sourceCount: 1,
+        files: [
+          {
+            name: "queue-notes.md",
+            content: "Preventable queue handoff errors appear every Monday.",
+            contentHash: "hash-1",
+            size: 51,
+          },
+        ],
+      },
     });
+
+    expect(capturedContext).toContain("Support queue notes");
+    expect(capturedContext).toContain("queue-notes.md");
+    expect(capturedContext).toContain("Preventable queue handoff errors");
 
     expect(run).toEqual(
       expect.objectContaining({
@@ -98,4 +117,3 @@ describe("LocalCruxHarnessProvider", () => {
     ]);
   });
 });
-

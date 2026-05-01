@@ -2,6 +2,13 @@ export type SourcePolicy = "offline" | "hybrid" | "web";
 
 export type TrustStatus = "pass" | "warn" | "fail";
 
+export type SourcePackFileInput = {
+  name: string;
+  content: string;
+  contentHash?: string;
+  size?: number;
+};
+
 export type AskInput = {
   question: string;
   context?: string;
@@ -14,6 +21,7 @@ export type AskInput = {
     name: string;
     path?: string;
     sourceCount: number;
+    files?: SourcePackFileInput[];
   };
 };
 

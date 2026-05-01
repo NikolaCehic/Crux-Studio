@@ -12,7 +12,7 @@ export type StudioSourcePack = {
   projectId: string;
   name: string;
   sourceCount: number;
-  files: Array<{ id: string; name: string }>;
+  files: Array<{ id: string; name: string; content?: string; contentHash?: string }>;
 };
 
 export type StudioReview = {

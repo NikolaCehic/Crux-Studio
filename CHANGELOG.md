@@ -6,6 +6,7 @@
 - Added project and source-pack APIs, including source file metadata and project-scoped run history.
 - Added provider registry, reviewed memo export, replay, and run comparison APIs.
 - Added source-pack-aware provider input and source-backed mock runs that improve trust status and confidence.
+- Persisted pasted source content locally and passed it through the provider boundary for ask and replay flows.
 - Added Studio UI controls for provider capabilities, project selection, source pack creation, source-backed runs, claim review, evidence annotation, replay, comparison, and reviewed memo export.
 - Added TDD coverage for the complete product workflow across provider, server, and web layers.
 - Added `.studio/` to ignored local runtime state.

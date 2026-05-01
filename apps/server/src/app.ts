@@ -153,6 +153,12 @@ export function buildServer({
             id: sourcePack.id,
             name: sourcePack.name,
             sourceCount: sourcePack.sourceCount,
+            files: sourcePack.files.map((file) => ({
+              name: file.name,
+              content: file.content,
+              contentHash: file.contentHash,
+              size: file.size,
+            })),
           }
         : undefined,
     });
@@ -309,6 +315,12 @@ export function buildServer({
                 id: sourcePack.id,
                 name: sourcePack.name,
                 sourceCount: sourcePack.sourceCount,
+                files: sourcePack.files.map((file) => ({
+                  name: file.name,
+                  content: file.content,
+                  contentHash: file.contentHash,
+                  size: file.size,
+                })),
               }
             : undefined,
         });

@@ -70,6 +70,14 @@ export class MockCruxProvider implements CruxProvider {
           sourcePolicy,
           inferredIntent: "decision",
           inferredScope: "general-analysis",
+          sourcePack: input.sourcePack
+            ? {
+                id: input.sourcePack.id,
+                name: input.sourcePack.name,
+                sourceCount: input.sourcePack.sourceCount,
+                files: input.sourcePack.files ?? [],
+              }
+            : undefined,
         },
         claims: {
           claims: [
@@ -93,10 +101,9 @@ export class MockCruxProvider implements CruxProvider {
           evidence: [
             {
               id: "evidence-1",
-              summary:
-                input.sourcePack
-                  ? `${input.sourcePack.name} provides source-backed context for this run.`
-                  : "Mock evidence stands in for a future harness artifact while preserving the UI contract.",
+              summary: input.sourcePack
+                ? `${input.sourcePack.name}${sourceFileLabel(input.sourcePack.files)} provides source-backed context for this run.`
+                : "Mock evidence stands in for a future harness artifact while preserving the UI contract.",
               sourceType: input.sourcePack ? "source_pack" : "mock",
               reliability: input.sourcePack ? 0.78 : 0.54,
               relevance: input.sourcePack ? 0.84 : 0.76,
@@ -220,4 +227,12 @@ The current run is useful as a structured draft. ${sourcePack ? "Uploaded source
 2. Add sources that would change the recommendation.
 3. Rerun Crux and compare trust movement.`;
   }
+}
+
+function sourceFileLabel(files: NonNullable<AskInput["sourcePack"]>["files"] = []) {
+  if (!files.length) {
+    return "";
+  }
+
+  return ` (${files.map((file) => file.name).join(", ")})`;
 }
