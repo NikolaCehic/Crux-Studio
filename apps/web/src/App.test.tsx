@@ -30,6 +30,15 @@ const mockRun = {
 const mockBundle = {
   ...mockRun,
   memo: mockRun.memoPreview,
+  review: {
+    runId: "mock-ask",
+    actions: [],
+    summary: {
+      approvedClaims: [],
+      rejectedClaims: [],
+      evidenceAnnotations: [],
+    },
+  },
   artifacts: {
     queryIntake: {
       original_query: mockRun.question,
@@ -74,11 +83,51 @@ const mockBundle = {
   },
 };
 
+const mockProject = {
+  id: "project-bakery",
+  name: "Bakery Operations",
+  createdAt: "2026-05-01T10:00:00.000Z",
+  runIds: [],
+  sourcePackIds: [],
+};
+
+const mockSourcePack = {
+  id: "source-pack-wholesale",
+  projectId: "project-bakery",
+  name: "Wholesale intake notes",
+  createdAt: "2026-05-01T10:00:00.000Z",
+  sourceCount: 1,
+  files: [{ id: "source-1", name: "notes.md" }],
+};
+
+const mockReview = {
+  runId: "mock-ask",
+  actions: [],
+  summary: {
+    approvedClaims: ["claim-1"],
+    rejectedClaims: [],
+    evidenceAnnotations: [{ evidenceId: "evidence-1", noteCount: 1 }],
+  },
+};
+
+const replayedRun = {
+  ...mockRun,
+  runId: "mock-replay",
+  trust: { ...mockRun.trust, confidence: 0.78 },
+};
+
+const replayedBundle = {
+  ...mockBundle,
+  ...replayedRun,
+  memo: replayedRun.memoPreview,
+  review: mockReview,
+};
+
 describe("Crux Studio Ask workflow", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
 
         if (url.endsWith("/api/runs/ask")) {
@@ -88,8 +137,91 @@ describe("Crux Studio Ask workflow", () => {
           });
         }
 
+        if (url.endsWith("/api/projects") && init?.method === "POST") {
+          return new Response(JSON.stringify(mockProject), {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url.endsWith("/api/projects")) {
+          return new Response(JSON.stringify([mockProject]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url.includes("/api/source-packs") && init?.method === "POST") {
+          return new Response(JSON.stringify(mockSourcePack), {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url.includes("/api/source-packs")) {
+          return new Response(JSON.stringify([mockSourcePack]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url.endsWith("/api/providers")) {
+          return new Response(
+            JSON.stringify({
+              providers: [
+                {
+                  id: "mock",
+                  status: "active",
+                  capabilities: ["ask", "inspect", "sources", "review", "compare"],
+                },
+              ],
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        if (url.endsWith("/review/claims") || url.endsWith("/review/evidence")) {
+          return new Response(JSON.stringify(mockReview), {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url.endsWith("/replay")) {
+          return new Response(JSON.stringify(replayedRun), {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url.endsWith("/api/runs/compare")) {
+          return new Response(
+            JSON.stringify({
+              leftRunId: "mock-ask",
+              rightRunId: "mock-replay",
+              trustMovement: 0.1,
+              differences: [{ path: "trust.status", left: "warn", right: "pass" }],
+              summary: { differenceCount: 1, leftTrust: "warn", rightTrust: "pass" },
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+
         if (url.endsWith("/api/runs/mock-ask")) {
           return new Response(JSON.stringify(mockBundle), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url.endsWith("/api/runs/mock-replay")) {
+          return new Response(JSON.stringify(replayedBundle), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           });
@@ -164,5 +296,44 @@ describe("Crux Studio Ask workflow", () => {
       "href",
       "/api/runs/mock-ask/export/memo",
     );
+  });
+
+  it("exposes project, source, review, replay, compare, and provider controls", async () => {
+    render(<App />);
+
+    expect(await screen.findByText("Provider: mock")).toBeInTheDocument();
+    expect(screen.getByText("Bakery Operations")).toBeInTheDocument();
+    expect(screen.getAllByText("Wholesale intake notes").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create source pack" }));
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/source-packs",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+
+    fireEvent.click(screen.getByText("mock-ask"));
+    fireEvent.click(await screen.findByRole("tab", { name: "Claims" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve claim-1" }));
+    expect((await screen.findAllByText(/Approved claims: claim-1/)).length).toBeGreaterThan(
+      0,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Evidence" }));
+    fireEvent.click(screen.getByRole("button", { name: "Annotate evidence-1" }));
+    expect((await screen.findAllByText(/Evidence notes: evidence-1/)).length).toBeGreaterThan(
+      0,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Replay run" }));
+    expect((await screen.findAllByText("mock-replay")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Compare latest" }));
+    expect(await screen.findByText(/Trust movement: 10%/)).toBeInTheDocument();
+
+    expect(
+      screen.getAllByRole("link", { name: "Export reviewed memo" })[0],
+    ).toHaveAttribute("href", "/api/runs/mock-replay/export/reviewed-memo");
   });
 });

@@ -4,7 +4,25 @@ import type {
   RunSummary,
   SourcePolicy,
 } from "@crux-studio/crux-provider";
-import { askCrux, getRun, listRuns } from "./api";
+import {
+  annotateEvidence,
+  askCrux,
+  compareRuns,
+  createProject,
+  createSourcePack,
+  getRun,
+  listProjects,
+  listProviders,
+  listRuns,
+  listSourcePacks,
+  replayRun,
+  reviewClaim,
+  type ProviderRegistry,
+  type RunComparison,
+  type StudioProject,
+  type StudioReview,
+  type StudioSourcePack,
+} from "./api";
 import "./styles.css";
 
 type AskFormState = {
@@ -47,8 +65,19 @@ const formatConfidence = (value: number) => `${Math.round(value * 100)}%`;
 export function App() {
   const [form, setForm] = useState<AskFormState>(initialForm);
   const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [projects, setProjects] = useState<StudioProject[]>([]);
+  const [sourcePacks, setSourcePacks] = useState<StudioSourcePack[]>([]);
+  const [providers, setProviders] = useState<ProviderRegistry["providers"]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [selectedSourcePackId, setSelectedSourcePackId] = useState("");
+  const [sourcePackName, setSourcePackName] = useState("Wholesale intake notes");
+  const [sourceDraft, setSourceDraft] = useState(
+    "# Source note\n\nPaste Markdown, TXT, or CSV evidence here.",
+  );
   const [run, setRun] = useState<RunSummary | null>(null);
   const [bundle, setBundle] = useState<RunBundle | null>(null);
+  const [review, setReview] = useState<StudioReview | null>(null);
+  const [comparison, setComparison] = useState<RunComparison | null>(null);
   const [activeTab, setActiveTab] = useState<ArtifactTab>("Memo");
   const [error, setError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
@@ -58,14 +87,35 @@ export function App() {
   const canRun = form.question.trim().length > 0 && !isRunning;
   const memoText = bundle?.memo ?? run?.memoPreview ?? "";
   const memoSections = useMemo(() => memoText.split("\n\n").filter(Boolean), [memoText]);
+  const visibleSourcePacks = useMemo(
+    () =>
+      sourcePacks.filter(
+        (pack) => !selectedProjectId || pack.projectId === selectedProjectId,
+      ),
+    [selectedProjectId, sourcePacks],
+  );
 
   useEffect(() => {
     let cancelled = false;
 
-    listRuns()
-      .then((history) => {
+    Promise.all([
+      listRuns(),
+      listProjects(),
+      listSourcePacks(),
+      listProviders(),
+    ])
+      .then(([history, loadedProjects, loadedSourcePacks, registry]) => {
         if (!cancelled) {
           setRuns(history);
+          setProjects(loadedProjects);
+          setSourcePacks(loadedSourcePacks);
+          setProviders(registry.providers);
+          setSelectedProjectId(loadedProjects[0]?.id ?? "");
+          setSelectedSourcePackId(
+            loadedSourcePacks.find(
+              (pack) => pack.projectId === loadedProjects[0]?.id,
+            )?.id ?? "",
+          );
         }
       })
       .catch((caught) => {
@@ -98,6 +148,8 @@ export function App() {
         context: form.context,
         timeHorizon: form.timeHorizon,
         sourcePolicy: form.sourcePolicy,
+        projectId: selectedProjectId || undefined,
+        sourcePackId: selectedSourcePackId || undefined,
       });
       setRun(nextRun);
       setRuns((current) => upsertRun(current, nextRun));
@@ -118,11 +170,127 @@ export function App() {
       const nextBundle = await getRun(runId);
       setBundle(nextBundle);
       setRun(nextBundle);
+      setReview(reviewFromBundle(nextBundle));
       setRuns((current) => upsertRun(current, nextBundle));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Run bundle failed to load.");
     } finally {
       setIsLoadingBundle(false);
+    }
+  }
+
+  async function handleCreateProject() {
+    try {
+      const project = await createProject("New Crux Project");
+      setProjects((current) => upsertById(current, project));
+      setSelectedProjectId(project.id);
+      setSelectedSourcePackId("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Project creation failed.");
+    }
+  }
+
+  function handleSelectProject(projectId: string) {
+    setSelectedProjectId(projectId);
+    setSelectedSourcePackId(
+      sourcePacks.find((pack) => pack.projectId === projectId)?.id ?? "",
+    );
+  }
+
+  async function handleCreateSourcePack() {
+    try {
+      if (!sourcePackName.trim() || !sourceDraft.trim()) {
+        setError("Source pack name and content are required.");
+        return;
+      }
+
+      const projectId = selectedProjectId || projects[0]?.id;
+      if (!projectId) {
+        const project = await createProject("Default Project");
+        setProjects((current) => upsertById(current, project));
+        setSelectedProjectId(project.id);
+        const pack = await createSourcePack({
+          projectId: project.id,
+          name: sourcePackName.trim(),
+          files: [{ name: "studio-source.md", content: sourceDraft.trim() }],
+        });
+        setSourcePacks((current) => upsertById(current, pack));
+        setSelectedSourcePackId(pack.id);
+        return;
+      }
+
+      const pack = await createSourcePack({
+        projectId,
+        name: sourcePackName.trim(),
+        files: [{ name: "studio-source.md", content: sourceDraft.trim() }],
+      });
+      setSourcePacks((current) => upsertById(current, pack));
+      setSelectedSourcePackId(pack.id);
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Source pack creation failed.");
+    }
+  }
+
+  async function handleReviewClaim(claimId: string, status: "approved" | "rejected") {
+    if (!selectedRun) return;
+
+    try {
+      const nextReview = await reviewClaim(selectedRun.runId, {
+        claimId,
+        status,
+        reviewer: "Studio reviewer",
+        rationale: status === "approved" ? "Approved in Studio." : "Rejected in Studio.",
+      });
+      setReview(nextReview);
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Claim review failed.");
+    }
+  }
+
+  async function handleAnnotateEvidence(evidenceId: string) {
+    if (!selectedRun) return;
+
+    try {
+      const nextReview = await annotateEvidence(selectedRun.runId, {
+        evidenceId,
+        reviewer: "Studio reviewer",
+        note: "Annotated in Studio.",
+      });
+      setReview(nextReview);
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Evidence annotation failed.");
+    }
+  }
+
+  async function handleReplay() {
+    if (!selectedRun) return;
+
+    try {
+      const replayed = await replayRun(selectedRun.runId);
+      setRuns((current) => upsertRun(current, replayed));
+      setRun(replayed);
+      setActiveTab("Memo");
+      await loadBundle(replayed.runId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Replay failed.");
+    }
+  }
+
+  async function handleCompareLatest() {
+    if (runs.length < 2) {
+      setError("At least two runs are required for comparison.");
+      return;
+    }
+
+    const [right, left] = runs;
+    try {
+      setComparison(await compareRuns(left.runId, right.runId));
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Run comparison failed.");
     }
   }
 
@@ -142,6 +310,16 @@ export function App() {
           <a href="#trace">Trace</a>
         </nav>
         <section className="history-panel" aria-label="Run history">
+          <p className="provider-line">
+            Provider: {providers[0]?.id ?? "unknown"}
+          </p>
+          {providers[0]?.capabilities.length ? (
+            <div className="provider-capabilities" aria-label="Provider capabilities">
+              {providers[0].capabilities.map((capability) => (
+                <span key={capability}>{capability}</span>
+              ))}
+            </div>
+          ) : null}
           <div className="history-heading">
             <span>Run history</span>
             <strong>{runs.length}</strong>
@@ -166,6 +344,44 @@ export function App() {
           ) : (
             <p className="quiet-copy">No runs indexed yet.</p>
           )}
+        </section>
+        <section className="workspace-panel" aria-label="Project workspace">
+          <div className="history-heading">
+            <span>Project</span>
+            <button type="button" onClick={() => void handleCreateProject()}>
+              New
+            </button>
+          </div>
+          <select
+            aria-label="Project"
+            value={selectedProjectId}
+            onChange={(event) => handleSelectProject(event.target.value)}
+          >
+            <option value="">No project yet</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+          <div className="source-pack-list">
+            {visibleSourcePacks.length ? (
+              visibleSourcePacks.map((pack) => (
+                <button
+                  className="source-pack-item"
+                  key={pack.id}
+                  aria-pressed={pack.id === selectedSourcePackId}
+                  type="button"
+                  onClick={() => setSelectedSourcePackId(pack.id)}
+                >
+                  <span>{pack.name}</span>
+                  <small>{pack.sourceCount} sources</small>
+                </button>
+              ))
+            ) : (
+              <p className="quiet-copy">No source packs in this project.</p>
+            )}
+          </div>
         </section>
         <div className="run-strip">
           <span>Current run</span>
@@ -244,6 +460,43 @@ export function App() {
             </label>
           </div>
 
+          <label className="field">
+            <span>Source pack</span>
+            <select
+              aria-label="Source pack"
+              value={selectedSourcePackId}
+              onChange={(event) => setSelectedSourcePackId(event.target.value)}
+            >
+              <option value="">No source pack</option>
+              {visibleSourcePacks.map((pack) => (
+                <option key={pack.id} value={pack.id}>
+                  {pack.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="source-builder">
+            <label className="field">
+              <span>New source pack</span>
+              <input
+                value={sourcePackName}
+                onChange={(event) => setSourcePackName(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>Source content</span>
+              <textarea
+                rows={4}
+                value={sourceDraft}
+                onChange={(event) => setSourceDraft(event.target.value)}
+              />
+            </label>
+            <button type="button" onClick={() => void handleCreateSourcePack()}>
+              Create source pack
+            </button>
+          </div>
+
           {error ? <p className="form-error">{error}</p> : null}
 
           <div className="form-actions">
@@ -260,9 +513,17 @@ export function App() {
               <h2>{selectedRun ? "Decision memo" : "No run yet"}</h2>
             </div>
             {selectedRun ? (
-              <a className="text-action" href={`/api/runs/${selectedRun.runId}/export/memo`}>
-                Export memo
-              </a>
+              <div className="memo-actions">
+                <a className="text-action" href={`/api/runs/${selectedRun.runId}/export/memo`}>
+                  Export memo
+                </a>
+                <button type="button" onClick={() => void handleReplay()}>
+                  Replay run
+                </button>
+                <button type="button" onClick={() => void handleCompareLatest()}>
+                  Compare latest
+                </button>
+              </div>
             ) : null}
           </div>
 
@@ -275,8 +536,12 @@ export function App() {
                 activeTab={activeTab}
                 bundle={bundle}
                 isLoading={isLoadingBundle}
+                onAnnotateEvidence={handleAnnotateEvidence}
                 onChangeTab={setActiveTab}
+                onReviewClaim={handleReviewClaim}
               />
+              <ReviewSummary review={review} runId={selectedRun.runId} />
+              {comparison ? <ComparisonSummary comparison={comparison} /> : null}
             </>
           ) : (
             <p className="empty-copy">
@@ -354,6 +619,10 @@ export function App() {
             </div>
           ) : null}
         </section>
+        <section className="inspector-section">
+          <p className="eyebrow">Review</p>
+          <ReviewSummary review={review} runId={selectedRun?.runId} compact />
+        </section>
       </aside>
     </main>
   );
@@ -363,12 +632,16 @@ function ArtifactInspector({
   activeTab,
   bundle,
   isLoading,
+  onAnnotateEvidence,
   onChangeTab,
+  onReviewClaim,
 }: {
   activeTab: ArtifactTab;
   bundle: RunBundle | null;
   isLoading: boolean;
+  onAnnotateEvidence: (evidenceId: string) => void;
   onChangeTab: (tab: ArtifactTab) => void;
+  onReviewClaim: (claimId: string, status: "approved" | "rejected") => void;
 }) {
   return (
     <section className="artifact-inspector" aria-label="Artifact inspector">
@@ -390,14 +663,19 @@ function ArtifactInspector({
         {isLoading ? (
           <p className="quiet-copy">Loading run bundle.</p>
         ) : (
-          renderArtifactTab(activeTab, bundle)
+          renderArtifactTab(activeTab, bundle, onReviewClaim, onAnnotateEvidence)
         )}
       </div>
     </section>
   );
 }
 
-function renderArtifactTab(tab: ArtifactTab, bundle: RunBundle | null) {
+function renderArtifactTab(
+  tab: ArtifactTab,
+  bundle: RunBundle | null,
+  onReviewClaim: (claimId: string, status: "approved" | "rejected") => void,
+  onAnnotateEvidence: (evidenceId: string) => void,
+) {
   if (!bundle) {
     return <p className="quiet-copy">Select or create a run to inspect artifacts.</p>;
   }
@@ -406,9 +684,9 @@ function renderArtifactTab(tab: ArtifactTab, bundle: RunBundle | null) {
     case "Memo":
       return <pre className="artifact-pre">{bundle.memo}</pre>;
     case "Claims":
-      return renderClaims(bundle.artifacts.claims);
+      return renderClaims(bundle.artifacts.claims, onReviewClaim);
     case "Evidence":
-      return renderEvidence(bundle.artifacts.evidence);
+      return renderEvidence(bundle.artifacts.evidence, onAnnotateEvidence);
     case "Diagnostics":
       return renderDiagnostics(bundle.artifacts.diagnostics);
     case "Trace":
@@ -422,7 +700,10 @@ function renderArtifactTab(tab: ArtifactTab, bundle: RunBundle | null) {
   }
 }
 
-function renderClaims(value: unknown) {
+function renderClaims(
+  value: unknown,
+  onReviewClaim: (claimId: string, status: "approved" | "rejected") => void,
+) {
   const claims = arrayField(value, "claims");
 
   if (!claims.length) {
@@ -442,6 +723,14 @@ function renderClaims(value: unknown) {
               <strong>{text}</strong>
               <span>{id}</span>
             </div>
+            <div className="row-actions">
+              <button type="button" onClick={() => onReviewClaim(id, "approved")}>
+                Approve {id}
+              </button>
+              <button type="button" onClick={() => onReviewClaim(id, "rejected")}>
+                Reject {id}
+              </button>
+            </div>
             {confidence === undefined ? null : <small>{formatConfidence(confidence)}</small>}
           </article>
         );
@@ -450,7 +739,10 @@ function renderClaims(value: unknown) {
   );
 }
 
-function renderEvidence(value: unknown) {
+function renderEvidence(
+  value: unknown,
+  onAnnotateEvidence: (evidenceId: string) => void,
+) {
   const evidence = arrayField(value, "evidence");
 
   if (!evidence.length) {
@@ -470,11 +762,61 @@ function renderEvidence(value: unknown) {
               <strong>{summary}</strong>
               <span>{id}</span>
             </div>
+            <button type="button" onClick={() => onAnnotateEvidence(id)}>
+              Annotate {id}
+            </button>
             {relevance === undefined ? null : <small>{formatConfidence(relevance)}</small>}
           </article>
         );
       })}
     </div>
+  );
+}
+
+function ReviewSummary({
+  compact = false,
+  review,
+  runId,
+}: {
+  compact?: boolean;
+  review: StudioReview | null;
+  runId?: string;
+}) {
+  const approved = review?.summary.approvedClaims.join(", ") || "none";
+  const rejected = review?.summary.rejectedClaims.join(", ") || "none";
+  const notes =
+    review?.summary.evidenceAnnotations
+      .map((item) => `${item.evidenceId} (${item.noteCount})`)
+      .join(", ") || "none";
+
+  return (
+    <div className={compact ? "review-summary compact" : "review-summary"}>
+      <p>Approved claims: {approved}</p>
+      <p>Rejected claims: {rejected}</p>
+      <p>Evidence notes: {notes}</p>
+      {runId ? (
+        <a className="text-action" href={`/api/runs/${runId}/export/reviewed-memo`}>
+          Export reviewed memo
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+function ComparisonSummary({ comparison }: { comparison: RunComparison }) {
+  return (
+    <section className="comparison-summary">
+      <h3>Run comparison</h3>
+      <p>Trust movement: {formatConfidence(comparison.trustMovement)}</p>
+      <p>
+        {comparison.leftRunId} to {comparison.rightRunId}
+      </p>
+      <ul>
+        {comparison.differences.map((difference) => (
+          <li key={difference.path}>{difference.path}</li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -564,6 +906,20 @@ function renderMemoSection(section: string) {
 
 function upsertRun(current: RunSummary[], run: RunSummary): RunSummary[] {
   return [run, ...current.filter((item) => item.runId !== run.runId)];
+}
+
+function upsertById<T extends { id: string }>(current: T[], item: T): T[] {
+  return [item, ...current.filter((candidate) => candidate.id !== item.id)];
+}
+
+function reviewFromBundle(bundle: RunBundle): StudioReview | null {
+  const record = asRecord(bundle);
+  const review = record.review;
+  if (!review || typeof review !== "object" || Array.isArray(review)) {
+    return null;
+  }
+
+  return review as StudioReview;
 }
 
 function arrayField(value: unknown, field: string): unknown[] {

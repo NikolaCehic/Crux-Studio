@@ -159,6 +159,28 @@ h3 {
   gap: 10px;
 }
 
+.provider-line {
+  color: oklch(33% 0.025 244);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.provider-capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.provider-capabilities span {
+  border: 1px solid oklch(80% 0.022 151);
+  border-radius: 999px;
+  color: oklch(33% 0.075 151);
+  background: oklch(94% 0.028 151);
+  padding: 4px 7px;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
 .history-heading,
 .with-action {
   display: flex;
@@ -175,6 +197,13 @@ h3 {
 
 .history-heading strong {
   color: oklch(29% 0.12 247);
+}
+
+.history-heading button {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 0.72rem;
+  font-weight: 800;
 }
 
 .history-list {
@@ -218,6 +247,54 @@ h3 {
   font-size: 0.7rem;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.workspace-panel {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid oklch(84% 0.011 242);
+  padding-top: 18px;
+}
+
+.source-pack-list {
+  display: grid;
+  gap: 6px;
+}
+
+.source-pack-item {
+  display: grid;
+  min-height: 44px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  border-color: oklch(84% 0.011 242);
+  color: oklch(30% 0.018 244);
+  background: oklch(96.5% 0.006 242);
+  padding: 8px;
+  text-align: left;
+}
+
+.source-pack-item[aria-pressed="true"] {
+  border-color: oklch(58% 0.095 151);
+  color: oklch(28% 0.075 151);
+  background: oklch(93.5% 0.03 151);
+}
+
+.source-pack-item span,
+.source-pack-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-pack-item span {
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.source-pack-item small {
+  color: oklch(48% 0.025 244);
+  font-size: 0.68rem;
+  font-weight: 800;
 }
 
 .run-strip strong,
@@ -320,6 +397,15 @@ textarea {
   gap: 14px;
 }
 
+.source-builder {
+  display: grid;
+  gap: 12px;
+  border: 1px solid oklch(84% 0.011 242);
+  border-radius: 7px;
+  background: oklch(96.5% 0.006 242);
+  padding: 12px;
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;
@@ -359,6 +445,27 @@ textarea {
 .memo-copy ol {
   margin: 10px 0 0 22px;
   padding: 0;
+}
+
+.memo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.memo-actions button {
+  min-height: 36px;
+  border-color: oklch(79% 0.014 242);
+  color: oklch(31% 0.11 247);
+  background: oklch(97% 0.006 242);
+  padding: 0 10px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.memo-actions button:hover {
+  background: oklch(91% 0.03 247);
 }
 
 .artifact-inspector {
@@ -420,6 +527,28 @@ textarea {
   display: grid;
   gap: 5px;
   min-width: 0;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.row-actions button,
+.artifact-row > button {
+  min-height: 32px;
+  border-color: oklch(79% 0.014 242);
+  color: oklch(31% 0.11 247);
+  background: oklch(97% 0.006 242);
+  padding: 0 9px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.row-actions button:hover,
+.artifact-row > button:hover {
+  background: oklch(91% 0.03 247);
 }
 
 .artifact-row strong {
@@ -491,6 +620,43 @@ textarea {
 
 .empty-copy {
   margin-top: 24px;
+}
+
+.review-summary,
+.comparison-summary {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  border: 1px solid oklch(83% 0.012 242);
+  border-radius: 7px;
+  background: oklch(97.5% 0.006 242);
+  padding: 12px;
+}
+
+.review-summary.compact {
+  margin-top: 12px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.review-summary p,
+.comparison-summary p,
+.comparison-summary li {
+  color: oklch(36% 0.02 244);
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
+
+.review-summary .text-action {
+  justify-self: start;
+}
+
+.comparison-summary ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
 }
 
 .inspector-section {

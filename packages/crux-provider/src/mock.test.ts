@@ -42,5 +42,30 @@ describe("MockCruxProvider contract", () => {
       ]),
     );
   });
-});
 
+  it("strengthens a mock run when source-pack context is supplied", async () => {
+    const provider: CruxProvider = new MockCruxProvider({
+      now: () => "2026-05-01T10:00:00.000Z",
+    });
+
+    const run = await provider.ask({
+      question: "Should a bakery automate wholesale order intake?",
+      sourcePolicy: "hybrid",
+      sourcePack: {
+        id: "source-pack-1",
+        name: "Wholesale order evidence",
+        sourceCount: 2,
+      },
+    });
+
+    expect(run.trust.status).toBe("pass");
+    const bundle = await provider.getRun(run.runId);
+    expect(bundle.artifacts.evidence).toEqual(
+      expect.objectContaining({
+        evidence: expect.arrayContaining([
+          expect.objectContaining({ sourceType: "source_pack" }),
+        ]),
+      }),
+    );
+  });
+});

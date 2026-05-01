@@ -7,6 +7,14 @@ export type AskInput = {
   context?: string;
   timeHorizon?: string;
   sourcePolicy?: SourcePolicy;
+  projectId?: string;
+  sourcePackId?: string;
+  sourcePack?: {
+    id: string;
+    name: string;
+    path?: string;
+    sourceCount: number;
+  };
 };
 
 export type RunPaths = {
@@ -25,6 +33,8 @@ export type TrustGate = {
 export type RunSummary = {
   runId: string;
   runDir: string;
+  projectId?: string;
+  sourcePackId?: string;
   question: string;
   scope: string;
   intent: string;

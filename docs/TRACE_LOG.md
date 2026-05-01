@@ -125,3 +125,48 @@ Verification:
 Result:
 
 - Crux Studio now satisfies the core v0.1 inspection acceptance loop for mock-provider development and the same UI contract is backed by the local harness provider.
+
+## 2026-05-01T02:12:47+02:00 - Full Product Workflow Red Step
+
+Command:
+
+- `pnpm test`
+
+Result:
+
+- Expected failure.
+- Mock provider does not yet strengthen runs with source-pack context.
+- Server product workflow tests require projects, source packs, review, replay, compare, and provider registry endpoints that do not exist yet.
+
+Acceptance target:
+
+- User can improve weak runs with sources.
+- User can review claims and annotate evidence.
+- User can replay and compare runs.
+- User can organize runs and sources by project.
+- User can see provider capabilities.
+
+## 2026-05-01T02:24:36+02:00 - Full Product Workflow Green Slice
+
+Implemented:
+
+- Added persistent Studio store abstractions with memory and local file backends.
+- Added project workspace APIs and project-run linking.
+- Added source pack APIs with hashed source file metadata.
+- Extended provider input with project and source-pack context.
+- Strengthened mock-provider runs when source-pack context is attached.
+- Routed local harness runs through source-pack context in the server adapter.
+- Added provider registry, source-backed ask, review, reviewed-memo export, replay, and compare endpoints.
+- Added Studio UI controls for provider capabilities, projects, source packs, claim approval/rejection, evidence notes, replay, run comparison, and reviewed memo export.
+- Added product workflow tests before implementation for the server and UI.
+- Added visual polish for the new workbench controls, preserving the inspection-first product layout.
+
+Verification:
+
+- `pnpm test` passed.
+- `pnpm check` passed.
+- `pnpm build` passed.
+
+Result:
+
+- Crux Studio now supports the non-hosted product loop: ask, attach source context, inspect artifacts, review claims and evidence, replay, compare, and export a reviewed memo.

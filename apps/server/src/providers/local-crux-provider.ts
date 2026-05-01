@@ -81,7 +81,9 @@ export class LocalCruxHarnessProvider implements CruxProvider {
 
   async ask(input: AskInput): Promise<RunSummary> {
     const result = await this.driver.runQuery(this.projectRoot, input.question, {
-      context: input.context,
+      context: [input.context, input.sourcePack ? `Studio source pack: ${input.sourcePack.name}` : undefined]
+        .filter(Boolean)
+        .join("\n\n"),
       timeHorizon: input.timeHorizon,
       sourcePolicy: input.sourcePolicy,
     });

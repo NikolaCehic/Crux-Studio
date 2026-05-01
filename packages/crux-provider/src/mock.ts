@@ -30,9 +30,10 @@ export class MockCruxProvider implements CruxProvider {
     const createdAt = this.now();
     const question = input.question.trim();
     const sourcePolicy = input.sourcePolicy ?? "hybrid";
+    const hasSourcePack = Boolean(input.sourcePack && input.sourcePack.sourceCount > 0);
     const runId = this.createRunId(question, createdAt);
     const runDir = `runs/${runId}`;
-    const blockingIssues = this.blockingIssuesFor(sourcePolicy);
+    const blockingIssues = hasSourcePack ? [] : this.blockingIssuesFor(sourcePolicy);
     const topic = firstTopicPhrase(question);
 
     const summary: RunSummary = {
@@ -46,7 +47,7 @@ export class MockCruxProvider implements CruxProvider {
       createdAt,
       trust: {
         status: blockingIssues.length > 0 ? "warn" : "pass",
-        confidence: blockingIssues.length > 0 ? 0.68 : 0.82,
+        confidence: blockingIssues.length > 0 ? 0.68 : 0.86,
         blockingIssues,
       },
       paths: {
@@ -55,7 +56,7 @@ export class MockCruxProvider implements CruxProvider {
         decisionMemo: `${runDir}/decision_memo.md`,
         htmlReport: `${runDir}/run_report.html`,
       },
-      memoPreview: this.createMemo(topic, input.context, input.timeHorizon),
+      memoPreview: this.createMemo(topic, input.context, input.timeHorizon, input.sourcePack),
     };
 
     const bundle: RunBundle = {
@@ -93,10 +94,12 @@ export class MockCruxProvider implements CruxProvider {
             {
               id: "evidence-1",
               summary:
-                "Mock evidence stands in for a future harness artifact while preserving the UI contract.",
-              sourceType: "mock",
-              reliability: 0.54,
-              relevance: 0.76,
+                input.sourcePack
+                  ? `${input.sourcePack.name} provides source-backed context for this run.`
+                  : "Mock evidence stands in for a future harness artifact while preserving the UI contract.",
+              sourceType: input.sourcePack ? "source_pack" : "mock",
+              reliability: input.sourcePack ? 0.78 : 0.54,
+              relevance: input.sourcePack ? 0.84 : 0.76,
               supports: ["claim-1"],
               challenges: [],
             },
@@ -165,7 +168,16 @@ export class MockCruxProvider implements CruxProvider {
 
   private createRunId(question: string, createdAt: string) {
     const timestamp = createdAt.replace(/[^0-9]/g, "").slice(0, 14);
-    return `mock-${timestamp}-${slugify(question) || "run"}`;
+    const base = `mock-${timestamp}-${slugify(question) || "run"}`;
+    if (!this.runs.has(base)) {
+      return base;
+    }
+
+    let suffix = 2;
+    while (this.runs.has(`${base}-${suffix}`)) {
+      suffix += 1;
+    }
+    return `${base}-${suffix}`;
   }
 
   private blockingIssuesFor(sourcePolicy: SourcePolicy) {
@@ -180,19 +192,27 @@ export class MockCruxProvider implements CruxProvider {
     return [];
   }
 
-  private createMemo(topic: string, context?: string, timeHorizon?: string) {
+  private createMemo(
+    topic: string,
+    context?: string,
+    timeHorizon?: string,
+    sourcePack?: AskInput["sourcePack"],
+  ) {
     const horizon = timeHorizon?.trim() || "90 days";
     const contextLine = context?.trim()
       ? `\n\nContext considered: ${context.trim()}`
       : "";
+    const sourceLine = sourcePack
+      ? `\n\nSources considered: ${sourcePack.name} (${sourcePack.sourceCount} source${sourcePack.sourceCount === 1 ? "" : "s"}).`
+      : "";
 
     return `## Recommendation
 
-Use a staged approach to ${topic}: clarify the decision criteria, compare the highest-leverage options, and run the smallest validation cycle inside ${horizon}.${contextLine}
+Use a staged approach to ${topic}: clarify the decision criteria, compare the highest-leverage options, and run the smallest validation cycle inside ${horizon}.${contextLine}${sourceLine}
 
 ## Why
 
-The current run is useful as a structured draft. It should become a trusted recommendation only after the missing constraints and source evidence are attached.
+The current run is useful as a structured draft. ${sourcePack ? "Uploaded source context has strengthened the evidence path, but human review is still required before rollout." : "It should become a trusted recommendation only after the missing constraints and source evidence are attached."}
 
 ## Next Tests
 
