@@ -1,5 +1,59 @@
 # Trace Log
 
+## 2026-05-01T11:46:00+02:00 - shadcn Studio Migration And Final UI Polish
+
+Intent:
+
+- Replace the custom-feeling Studio UI with shadcn UI primitives across the product surface.
+- Preserve the non-hosted product boundary and existing Crux provider workflow.
+- Keep the implementation TDD-first, visually audited, and fully traceable.
+
+Reference material read:
+
+- Official shadcn Vite installation docs at `https://ui.shadcn.com/docs/installation/vite`.
+- Impeccable product, audit, polish, and critique guidance.
+- Existing `PRODUCT.md`, `DESIGN.md`, and Desktop `Crux Studio_Design` reference material from the prior audit pass.
+
+TDD state:
+
+- Added a web test proving that Studio preloads the latest run so returning users land on an inspectable workbench instead of an empty memo surface.
+- Updated existing run-history selectors to account for the same run id appearing in both history and current-run status after preload.
+
+Implemented:
+
+- Installed Tailwind CSS v4, the shadcn CLI/runtime dependencies, Radix-backed primitives, lucide icons, and Geist font assets for the web app.
+- Added Vite/Tailwind/shadcn setup:
+  - `apps/web/components.json`
+  - `apps/web/src/lib/utils.ts`
+  - `apps/web/vite.config.ts` Tailwind plugin and `@/*` alias
+  - `apps/web/tsconfig.json` `baseUrl` and path alias
+- Generated shadcn UI components under `apps/web/src/components/ui/`.
+- Rebuilt `apps/web/src/App.tsx` around shadcn `Button`, `Card`, `Badge`, `Field`, `Input`, `Textarea`, `NativeSelect`, `Tabs`, `Breadcrumb`, `Separator`, `Skeleton`, `ScrollArea`, and `Item` primitives.
+- Replaced the old bespoke stylesheet with a Tailwind v4/shadcn token bridge using OKLCH Crux colors and reduced-motion handling.
+- Changed the app label from `local` to `workspace` for a more product-grade chrome.
+- Added latest-run preload on initial history load.
+- Tightened desktop workbench columns and delayed side-by-side artifact actions until `2xl` so claims and evidence stay readable at 1440px.
+- Refreshed all README screenshots from the running app:
+  - `docs/assets/crux-studio-workbench.png`
+  - `docs/assets/crux-studio-claims.png`
+  - `docs/assets/crux-studio-claims-focus.png`
+  - `docs/assets/crux-studio-claims-detail.png`
+  - `docs/assets/crux-studio-review-compare.png`
+  - `docs/assets/crux-studio-review-compare-focus.png`
+  - `docs/assets/crux-studio-review-compare-detail.png`
+
+Verification:
+
+- `pnpm test -- --runInBand` passed.
+- `pnpm check` passed.
+- `pnpm build` passed.
+- Live browser smoke passed through latest-run preload, sample arbitrary run, Claims tab, claim approval controls, and responsive narrow viewport screenshots.
+- Desktop 1440px screenshot audit passed after correcting artifact-row breakpoints and recapturing the README assets.
+
+Result:
+
+- Crux Studio now presents as a shadcn-based product workbench with clearer structure, stronger component consistency, better responsive behavior, and traceable verification.
+
 ## 2026-05-01T11:02:00+02:00 - Impeccable Design Audit And Polish
 
 Intent:

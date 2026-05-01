@@ -1,9 +1,56 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  type Dispatch,
+  type FormEvent,
+  type ReactNode,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type {
   RunBundle,
   RunSummary,
   SourcePolicy,
 } from "@crux-studio/crux-provider";
+import {
+  AlertTriangle,
+  Boxes,
+  Check,
+  Download,
+  FileJson,
+  FileText,
+  GitCompareArrows,
+  NotebookText,
+  Play,
+  Plus,
+  RotateCcw,
+  SearchCheck,
+  ShieldCheck,
+  SquareActivity,
+  X,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import {
   annotateEvidence,
   askCrux,
@@ -53,6 +100,8 @@ const artifactTabs: ArtifactTab[] = [
   "Trace",
 ];
 
+const policyOptions: SourcePolicy[] = ["offline", "hybrid", "web"];
+
 const initialForm: AskFormState = {
   question: "",
   context: "",
@@ -60,14 +109,20 @@ const initialForm: AskFormState = {
   sourcePolicy: "offline",
 };
 
-const formatConfidence = (value: number) => `${Math.round(value * 100)}%`;
 const policyHelp: Record<SourcePolicy, string> = {
   offline: "Draft with local context only. Treat source-free output as untrusted.",
   hybrid: "Use attached source packs first, then provider context when available.",
   web: "Connector-ready mode for providers that can resolve live sources.",
 };
 
-const policyOptions: SourcePolicy[] = ["offline", "hybrid", "web"];
+const navItems = [
+  { href: "#ask", icon: Plus, label: "New run" },
+  { href: "#memo", icon: NotebookText, label: "Current run" },
+  { href: "#artifacts", icon: Boxes, label: "Artifacts" },
+  { href: "#trace", icon: SquareActivity, label: "Trace" },
+];
+
+const formatConfidence = (value: number) => `${Math.round(value * 100)}%`;
 
 export function App() {
   const [form, setForm] = useState<AskFormState>(initialForm);
@@ -126,6 +181,10 @@ export function App() {
               (pack) => pack.projectId === loadedProjects[0]?.id,
             )?.id ?? "",
           );
+          if (history[0]) {
+            setRun(history[0]);
+            void loadBundle(history[0].runId);
+          }
         }
       })
       .catch((caught) => {
@@ -305,369 +364,559 @@ export function App() {
   }
 
   return (
-    <main className="studio-shell">
-      <aside className="left-rail" aria-label="Workspace navigation">
-        <div className="brand-lockup">
+    <main className="min-h-svh bg-background text-foreground lg:grid lg:grid-cols-[256px_minmax(0,1fr)_320px]">
+      <aside
+        aria-label="Workspace navigation"
+        className="border-border/80 bg-sidebar p-4 text-sidebar-foreground lg:sticky lg:top-0 lg:flex lg:h-svh lg:flex-col lg:overflow-y-auto lg:border-r"
+      >
+        <div className="flex items-center gap-3">
           <CruxMark />
-          <div>
-            <h1>Crux Studio</h1>
-            <p className="brand-meta">v0.2 · local</p>
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
+            <p className="font-mono text-[0.72rem] text-muted-foreground">
+              v0.2 · workspace
+            </p>
           </div>
         </div>
-        <nav className="rail-nav" aria-label="Run sections">
-          <p className="rail-label">Workspace</p>
-          <a aria-current="page" href="#ask">New run</a>
-          <a href="#memo">Current run</a>
-          <a href="#artifacts">Artifacts</a>
-          <a href="#trace">Trace</a>
-        </nav>
-        <section className="history-panel" aria-label="Run history">
-          <p className="provider-line">
-            Provider: {activeProvider?.id ?? "unknown"}
+
+        <nav aria-label="Run sections" className="mt-6 grid gap-1">
+          <p className="px-2 font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+            Workspace
           </p>
-          {activeProvider?.capabilities.length ? (
-            <div className="provider-capabilities" aria-label="Provider capabilities">
-              {activeProvider.capabilities.map((capability) => (
-                <span key={capability}>{capability}</span>
-              ))}
-            </div>
-          ) : null}
-          <div className="history-heading">
-            <span>Run history</span>
-            <strong>{runs.length}</strong>
+          <div className="grid grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-1">
+            {navItems.map((item) => (
+              <Button
+                asChild
+                className={cn(
+                  "h-9 justify-start gap-2 px-2.5",
+                  item.href === "#ask" && "bg-accent text-accent-foreground",
+                )}
+                key={item.href}
+                variant="ghost"
+              >
+                <a aria-current={item.href === "#ask" ? "page" : undefined} href={item.href}>
+                  <item.icon className="size-4" />
+                  {item.label}
+                </a>
+              </Button>
+            ))}
           </div>
+        </nav>
+
+        <Separator className="my-5" />
+
+        <section aria-label="Run history" className="grid gap-3">
+          <div className="grid gap-2">
+            <p className="text-sm font-semibold">
+              Provider: {activeProvider?.id ?? "unknown"}
+            </p>
+            {activeProvider?.capabilities.length ? (
+              <div className="flex flex-wrap gap-1.5" aria-label="Provider capabilities">
+                {activeProvider.capabilities.map((capability) => (
+                  <Badge className="bg-emerald-100 text-emerald-900 ring-emerald-300/70" key={capability} variant="outline">
+                    {capability}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium text-muted-foreground">Run history</span>
+            <Badge variant="secondary">{runs.length}</Badge>
+          </div>
+
           {runs.length ? (
-            <div className="history-list">
-              {runs.slice(0, 8).map((item) => (
-                <button
-                  className="history-item"
-                  key={item.runId}
-                  type="button"
-                  onClick={() => {
-                    setActiveTab("Memo");
-                    void loadBundle(item.runId);
-                  }}
-                >
-                  <span>{item.question}</span>
-                  <em>{item.runId}</em>
-                  <small>{item.trust.status}</small>
-                </button>
-              ))}
-            </div>
+            <ScrollArea className="max-h-56">
+              <div className="grid gap-2 pr-2">
+                {runs.slice(0, 8).map((item) => (
+                  <Button
+                    className="h-auto justify-start whitespace-normal px-3 py-2 text-left"
+                    key={item.runId}
+                    onClick={() => {
+                      setActiveTab("Memo");
+                      void loadBundle(item.runId);
+                    }}
+                    type="button"
+                    variant="outline"
+                  >
+                    <span className="grid min-w-0 flex-1 gap-0.5">
+                      <span className="line-clamp-1 text-sm font-medium">{item.question}</span>
+                      <span className="truncate font-mono text-[0.68rem] text-muted-foreground">
+                        {item.runId}
+                      </span>
+                    </span>
+                    <TrustBadge status={item.trust.status} />
+                  </Button>
+                ))}
+              </div>
+            </ScrollArea>
           ) : (
-            <p className="quiet-copy">No runs indexed yet.</p>
+            <p className="text-sm text-muted-foreground">No runs indexed yet.</p>
           )}
         </section>
-        <section className="workspace-panel" aria-label="Project workspace">
-          <div className="history-heading">
-            <span>Project</span>
-            <button type="button" onClick={() => void handleCreateProject()}>
+
+        <Separator className="my-5" />
+
+        <section aria-label="Project workspace" className="grid gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-medium text-muted-foreground">Project</span>
+            <Button size="sm" type="button" onClick={() => void handleCreateProject()}>
+              <Plus className="size-3.5" />
               New
-            </button>
+            </Button>
           </div>
-          <select
+
+          <NativeSelect
             aria-label="Project"
+            className="w-full"
             value={selectedProjectId}
             onChange={(event) => handleSelectProject(event.target.value)}
           >
-            <option value="">No project yet</option>
+            <NativeSelectOption value="">No project yet</NativeSelectOption>
             {projects.map((project) => (
-              <option key={project.id} value={project.id}>
+              <NativeSelectOption key={project.id} value={project.id}>
                 {project.name}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-          <div className="source-pack-list">
+          </NativeSelect>
+
+          <div className="grid gap-2">
             {visibleSourcePacks.length ? (
               visibleSourcePacks.map((pack) => (
-                <button
-                  className="source-pack-item"
-                  key={pack.id}
+                <Button
                   aria-pressed={pack.id === selectedSourcePackId}
+                  className={cn(
+                    "h-auto justify-between gap-3 whitespace-normal px-3 py-2 text-left",
+                    pack.id === selectedSourcePackId &&
+                      "border-emerald-300 bg-emerald-100 text-emerald-950 hover:bg-emerald-100",
+                  )}
+                  key={pack.id}
                   type="button"
+                  variant="outline"
                   onClick={() => setSelectedSourcePackId(pack.id)}
                 >
-                  <span>{pack.name}</span>
-                  <small>{pack.sourceCount} sources</small>
-                </button>
+                  <span className="line-clamp-1 font-medium">{pack.name}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {pack.sourceCount} sources
+                  </span>
+                </Button>
               ))
             ) : (
-              <p className="quiet-copy">No source packs in this project.</p>
+              <p className="text-sm text-muted-foreground">No source packs in this project.</p>
             )}
           </div>
         </section>
-        <div className="run-strip">
-          <span>Current run</span>
-          <strong>{selectedRun?.runId ?? "None"}</strong>
+
+        <div className="mt-5 border-t pt-4 text-sm lg:mt-auto">
+          <p className="text-muted-foreground">Current run</p>
+          <p className="break-all font-mono text-xs font-semibold">
+            {selectedRun?.runId ?? "None"}
+          </p>
         </div>
       </aside>
 
-      <section className="studio-main">
-        <header className="topbar" aria-label="Workspace status">
-          <div>
-            <span>workspace</span>
-            <span>/</span>
-            <strong>{selectedProject?.name ?? "No project"}</strong>
-            {selectedSourcePack ? (
-              <>
-                <span>/</span>
-                <strong>{selectedSourcePack.name}</strong>
-              </>
-            ) : null}
-          </div>
-          <p>harness engine ready</p>
+      <section className="min-w-0">
+        <header
+          aria-label="Workspace status"
+          className="flex min-h-11 flex-wrap items-center justify-between gap-3 border-b bg-background/95 px-4 py-3 lg:px-8"
+        >
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>workspace</BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>{selectedProject?.name ?? "No project"}</BreadcrumbPage>
+              </BreadcrumbItem>
+              {selectedSourcePack ? (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>{selectedSourcePack.name}</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </>
+              ) : null}
+            </BreadcrumbList>
+          </Breadcrumb>
+          <Badge className="gap-1.5 bg-emerald-100 text-emerald-900 ring-emerald-300/70" variant="outline">
+            <span className="size-1.5 rounded-full bg-emerald-700" />
+            harness engine ready
+          </Badge>
         </header>
 
-        <section className="workspace" id="ask">
-          <form className="ask-panel" onSubmit={handleSubmit}>
-            <div className="section-heading">
-              <p className="eyebrow">New run · {selectedProject?.name ?? "workspace"}</p>
-              <h2>Ask a decision-grade question.</h2>
-            </div>
+        <section className="grid gap-6 p-4 xl:grid-cols-[minmax(300px,390px)_minmax(0,1fr)] xl:p-8" id="ask">
+          <RunForm
+            canRun={canRun}
+            error={error}
+            form={form}
+            isRunning={isRunning}
+            policyHelp={policyHelp[form.sourcePolicy]}
+            selectedProjectName={selectedProject?.name ?? "workspace"}
+            selectedSourcePackId={selectedSourcePackId}
+            sourceDraft={sourceDraft}
+            sourcePackName={sourcePackName}
+            visibleSourcePacks={visibleSourcePacks}
+            onCreateSourcePack={() => void handleCreateSourcePack()}
+            onFormChange={setForm}
+            onSetSourceDraft={setSourceDraft}
+            onSetSourcePackName={setSourcePackName}
+            onSetSourcePackId={setSelectedSourcePackId}
+            onSubmit={handleSubmit}
+          />
 
-            <label className="field">
-              <span>Question</span>
-              <textarea
-                id="question"
-                name="question"
-                rows={4}
-                value={form.question}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, question: event.target.value }))
-                }
-                placeholder="How should a support team reduce first-response time without hiring more agents this month?"
-              />
-            </label>
-
-            <label className="field">
-              <span>Context</span>
-              <textarea
-                id="context"
-                name="context"
-                rows={3}
-                value={form.context}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, context: event.target.value }))
-                }
-                placeholder="Constraints, goals, tradeoffs, stakeholders"
-              />
-            </label>
-
-            <div className="field-grid">
-              <label className="field">
-                <span>Time horizon</span>
-                <input
-                  id="timeHorizon"
-                  name="timeHorizon"
-                  value={form.timeHorizon}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      timeHorizon: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-
-              <fieldset className="source-policy" aria-label="Source policy">
-                <legend>Source policy</legend>
-                <div>
-                  {policyOptions.map((policy) => (
-                    <button
-                      aria-pressed={form.sourcePolicy === policy}
-                      key={policy}
-                      type="button"
-                      onClick={() =>
-                        setForm((current) => ({ ...current, sourcePolicy: policy }))
-                      }
-                    >
-                      {policy}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-            </div>
-            <p className="help-copy">{policyHelp[form.sourcePolicy]}</p>
-
-            <label className="field">
-              <span>Source pack</span>
-              <select
-                aria-label="Source pack"
-                value={selectedSourcePackId}
-                onChange={(event) => setSelectedSourcePackId(event.target.value)}
-              >
-                <option value="">No source pack</option>
-                {visibleSourcePacks.map((pack) => (
-                  <option key={pack.id} value={pack.id}>
-                    {pack.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="source-builder" aria-label="Source attachment">
-              <label className="field">
-                <span>New source pack</span>
-                <input
-                  value={sourcePackName}
-                  onChange={(event) => setSourcePackName(event.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span>Source content</span>
-                <textarea
-                  rows={4}
-                  value={sourceDraft}
-                  onChange={(event) => setSourceDraft(event.target.value)}
-                />
-              </label>
-              <button type="button" onClick={() => void handleCreateSourcePack()}>
-                Create source pack
-              </button>
-            </div>
-
-            {error ? <p className="form-error">{error}</p> : null}
-
-            <div className="form-actions">
-              <button type="submit" disabled={!canRun}>
-                {isRunning ? "Running" : "Run Crux"}
-              </button>
-            </div>
-          </form>
-
-          <article className="memo-panel" id="memo" aria-live="polite">
-            <div className="section-heading with-action">
-              <div>
-                <p className="eyebrow">Memo</p>
-                <h2>{selectedRun ? "Decision memo" : "No run yet"}</h2>
-              </div>
-              {selectedRun ? (
-                <div className="memo-actions">
-                  <a
-                    className="text-action"
-                    href={`/api/runs/${selectedRun.runId}/export/memo`}
-                  >
-                    Export memo
-                  </a>
-                  <button type="button" onClick={() => void handleReplay()}>
-                    Replay run
-                  </button>
-                  <button type="button" onClick={() => void handleCompareLatest()}>
-                    Compare latest
-                  </button>
-                </div>
-              ) : null}
-            </div>
-
-            {selectedRun ? (
-              <>
-                <div className="memo-copy">
-                  {memoSections.map((section) => renderMemoSection(section))}
-                </div>
-                <ArtifactInspector
-                  activeTab={activeTab}
-                  bundle={bundle}
-                  isLoading={isLoadingBundle}
-                  onAnnotateEvidence={handleAnnotateEvidence}
-                  onChangeTab={setActiveTab}
-                  onReviewClaim={handleReviewClaim}
-                />
-                <ReviewSummary review={review} runId={selectedRun.runId} />
-                {comparison ? <ComparisonSummary comparison={comparison} /> : null}
-              </>
-            ) : (
-              <p className="empty-copy">
-                Ask a question to create the first inspectable Crux run.
-              </p>
-            )}
-          </article>
+          <MemoPanel
+            activeTab={activeTab}
+            bundle={bundle}
+            comparison={comparison}
+            isLoadingBundle={isLoadingBundle}
+            memoSections={memoSections}
+            review={review}
+            selectedRun={selectedRun}
+            onAnnotateEvidence={handleAnnotateEvidence}
+            onChangeTab={setActiveTab}
+            onCompareLatest={() => void handleCompareLatest()}
+            onReplay={() => void handleReplay()}
+            onReviewClaim={handleReviewClaim}
+          />
         </section>
       </section>
 
-      <aside className="right-inspector" aria-label="Run inspector">
-        <section className="inspector-section">
-          <p className="eyebrow">Trust</p>
-          <div className="trust-heading">
-            <h2>Trust gate</h2>
-            <span
-              className={`trust-badge trust-${selectedRun?.trust.status ?? "empty"}`}
-            >
-              {selectedRun?.trust.status ?? "pending"}
-            </span>
+      <aside
+        aria-label="Run inspector"
+        className="grid gap-4 border-t bg-sidebar p-4 text-sidebar-foreground lg:sticky lg:top-0 lg:h-svh lg:overflow-y-auto lg:border-l lg:border-t-0"
+      >
+        <InspectorCard label="Trust">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold tracking-tight">Trust gate</h2>
+            <TrustBadge status={selectedRun?.trust.status ?? "pending"} />
           </div>
-          <dl className="fact-list">
-            <div>
-              <dt>Confidence</dt>
-              <dd>
-                {selectedRun ? formatConfidence(selectedRun.trust.confidence) : "Waiting"}
-              </dd>
-            </div>
-            <div>
-              <dt>Answerability</dt>
-              <dd>{selectedRun?.answerability ?? "Not evaluated"}</dd>
-            </div>
-            <div>
-              <dt>Risk</dt>
-              <dd>{selectedRun?.risk ?? "Not evaluated"}</dd>
-            </div>
-          </dl>
-        </section>
+          <FactList
+            items={[
+              {
+                label: "Confidence",
+                value: selectedRun ? formatConfidence(selectedRun.trust.confidence) : "Waiting",
+              },
+              { label: "Answerability", value: selectedRun?.answerability ?? "Not evaluated" },
+              { label: "Risk", value: selectedRun?.risk ?? "Not evaluated" },
+            ]}
+          />
+        </InspectorCard>
 
-        <section className="inspector-section">
-          <p className="eyebrow">Blocking issues</p>
+        <InspectorCard label="Blocking issues">
           {selectedRun?.trust.blockingIssues.length ? (
-            <ul className="issue-list">
+            <ul className="grid gap-2">
               {selectedRun.trust.blockingIssues.map((issue) => (
-                <li key={issue}>{issue}</li>
+                <li
+                  className="rounded-lg border border-amber-300 bg-amber-100 px-3 py-2 text-sm text-amber-950"
+                  key={issue}
+                >
+                  {issue}
+                </li>
               ))}
             </ul>
           ) : (
-            <p className="quiet-copy">
+            <p className="text-sm text-muted-foreground">
               {selectedRun ? "No blocking issues reported." : "Waiting"}
             </p>
           )}
-        </section>
+        </InspectorCard>
 
-        <section className="inspector-section" id="artifacts">
-          <p className="eyebrow">Artifacts</p>
-          <dl className="path-list">
-            <div>
-              <dt>Input</dt>
-              <dd>{selectedRun?.paths.generatedInput ?? "Not generated"}</dd>
-            </div>
-            <div>
-              <dt>Memo</dt>
-              <dd>{selectedRun?.paths.decisionMemo ?? "Not generated"}</dd>
-            </div>
-            <div>
-              <dt>Report</dt>
-              <dd>{selectedRun?.paths.htmlReport ?? "Not generated"}</dd>
-            </div>
-          </dl>
+        <InspectorCard id="artifacts" label="Artifacts">
+          <FactList
+            mono
+            items={[
+              { label: "Input", value: selectedRun?.paths.generatedInput ?? "Not generated" },
+              { label: "Memo", value: selectedRun?.paths.decisionMemo ?? "Not generated" },
+              { label: "Report", value: selectedRun?.paths.htmlReport ?? "Not generated" },
+            ]}
+          />
           {selectedRun ? (
-            <div className="raw-link-list" aria-label="Raw artifact links">
-              <a href={`/api/runs/${selectedRun.runId}/artifacts/claims`}>Claims JSON</a>
-              <a href={`/api/runs/${selectedRun.runId}/artifacts/evidence`}>Evidence JSON</a>
-              <a href={`/api/runs/${selectedRun.runId}/artifacts/trace`}>Trace JSON</a>
+            <div className="mt-4 flex flex-wrap gap-2" aria-label="Raw artifact links">
+              <Button asChild size="sm" variant="outline">
+                <a href={`/api/runs/${selectedRun.runId}/artifacts/claims`}>
+                  <FileJson className="size-3.5" />
+                  Claims JSON
+                </a>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <a href={`/api/runs/${selectedRun.runId}/artifacts/evidence`}>
+                  <FileJson className="size-3.5" />
+                  Evidence JSON
+                </a>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <a href={`/api/runs/${selectedRun.runId}/artifacts/trace`}>
+                  <FileJson className="size-3.5" />
+                  Trace JSON
+                </a>
+              </Button>
             </div>
           ) : null}
-        </section>
-        <section className="inspector-section">
-          <p className="eyebrow">Review</p>
+        </InspectorCard>
+
+        <InspectorCard label="Review">
           <ReviewSummary review={review} runId={selectedRun?.runId} compact />
-        </section>
+        </InspectorCard>
       </aside>
     </main>
   );
 }
 
-function CruxMark() {
+function RunForm({
+  canRun,
+  error,
+  form,
+  isRunning,
+  policyHelp,
+  selectedProjectName,
+  selectedSourcePackId,
+  sourceDraft,
+  sourcePackName,
+  visibleSourcePacks,
+  onCreateSourcePack,
+  onFormChange,
+  onSetSourceDraft,
+  onSetSourcePackId,
+  onSetSourcePackName,
+  onSubmit,
+}: {
+  canRun: boolean;
+  error: string | null;
+  form: AskFormState;
+  isRunning: boolean;
+  policyHelp: string;
+  selectedProjectName: string;
+  selectedSourcePackId: string;
+  sourceDraft: string;
+  sourcePackName: string;
+  visibleSourcePacks: StudioSourcePack[];
+  onCreateSourcePack: () => void;
+  onFormChange: Dispatch<SetStateAction<AskFormState>>;
+  onSetSourceDraft: (value: string) => void;
+  onSetSourcePackId: (value: string) => void;
+  onSetSourcePackName: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
   return (
-    <span className="crux-mark" aria-hidden="true">
-      <span />
-      <span />
-      <span />
-    </span>
+    <form className="self-start" onSubmit={onSubmit}>
+      <Card>
+        <CardHeader>
+          <div>
+            <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+              New run · {selectedProjectName}
+            </p>
+            <CardTitle className="mt-2 text-xl">Ask a decision-grade question.</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="question">Question</FieldLabel>
+              <Textarea
+                id="question"
+                name="question"
+                rows={4}
+                value={form.question}
+                onChange={(event) =>
+                  onFormChange((current) => ({ ...current, question: event.target.value }))
+                }
+                placeholder="How should a support team reduce first-response time without hiring more agents this month?"
+              />
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="context">Context</FieldLabel>
+              <Textarea
+                id="context"
+                name="context"
+                rows={3}
+                value={form.context}
+                onChange={(event) =>
+                  onFormChange((current) => ({ ...current, context: event.target.value }))
+                }
+                placeholder="Constraints, goals, tradeoffs, stakeholders"
+              />
+            </Field>
+
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(210px,1fr)]">
+              <Field>
+                <FieldLabel htmlFor="timeHorizon">Time horizon</FieldLabel>
+                <Input
+                  id="timeHorizon"
+                  name="timeHorizon"
+                  value={form.timeHorizon}
+                  onChange={(event) =>
+                    onFormChange((current) => ({
+                      ...current,
+                      timeHorizon: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
+
+              <FieldSet aria-label="Source policy" className="gap-2">
+                <FieldLegend variant="label">Source policy</FieldLegend>
+                <div className="grid grid-cols-3 rounded-lg border bg-background p-1">
+                  {policyOptions.map((policy) => (
+                    <Button
+                      aria-pressed={form.sourcePolicy === policy}
+                      className={cn(
+                        "h-8 capitalize",
+                        form.sourcePolicy === policy &&
+                          "bg-accent text-accent-foreground hover:bg-accent",
+                      )}
+                      key={policy}
+                      type="button"
+                      variant="ghost"
+                      onClick={() => onFormChange((current) => ({ ...current, sourcePolicy: policy }))}
+                    >
+                      {policy}
+                    </Button>
+                  ))}
+                </div>
+                <FieldDescription>{policyHelp}</FieldDescription>
+              </FieldSet>
+            </div>
+
+            <Field>
+              <FieldLabel htmlFor="sourcePack">Source pack</FieldLabel>
+              <NativeSelect
+                aria-label="Source pack"
+                className="w-full"
+                id="sourcePack"
+                value={selectedSourcePackId}
+                onChange={(event) => onSetSourcePackId(event.target.value)}
+              >
+                <NativeSelectOption value="">No source pack</NativeSelectOption>
+                {visibleSourcePacks.map((pack) => (
+                  <NativeSelectOption key={pack.id} value={pack.id}>
+                    {pack.name}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </Field>
+
+            <div aria-label="Source attachment" className="grid gap-3 rounded-lg border border-dashed bg-muted/35 p-4">
+              <Field>
+                <FieldLabel htmlFor="sourcePackName">New source pack</FieldLabel>
+                <Input
+                  id="sourcePackName"
+                  value={sourcePackName}
+                  onChange={(event) => onSetSourcePackName(event.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="sourceDraft">Source content</FieldLabel>
+                <Textarea
+                  id="sourceDraft"
+                  rows={4}
+                  value={sourceDraft}
+                  onChange={(event) => onSetSourceDraft(event.target.value)}
+                />
+              </Field>
+              <Button type="button" variant="secondary" onClick={onCreateSourcePack}>
+                <Plus className="size-4" />
+                Create source pack
+              </Button>
+            </div>
+
+            {error ? <FieldError>{error}</FieldError> : null}
+
+            <div className="flex justify-end">
+              <Button className="min-w-32" disabled={!canRun} type="submit">
+                <Play className="size-4" />
+                {isRunning ? "Running" : "Run Crux"}
+              </Button>
+            </div>
+          </FieldGroup>
+        </CardContent>
+      </Card>
+    </form>
+  );
+}
+
+function MemoPanel({
+  activeTab,
+  bundle,
+  comparison,
+  isLoadingBundle,
+  memoSections,
+  review,
+  selectedRun,
+  onAnnotateEvidence,
+  onChangeTab,
+  onCompareLatest,
+  onReplay,
+  onReviewClaim,
+}: {
+  activeTab: ArtifactTab;
+  bundle: RunBundle | null;
+  comparison: RunComparison | null;
+  isLoadingBundle: boolean;
+  memoSections: string[];
+  review: StudioReview | null;
+  selectedRun: RunBundle | RunSummary | null;
+  onAnnotateEvidence: (evidenceId: string) => void;
+  onChangeTab: (tab: ArtifactTab) => void;
+  onCompareLatest: () => void;
+  onReplay: () => void;
+  onReviewClaim: (claimId: string, status: "approved" | "rejected") => void;
+}) {
+  return (
+    <Card id="memo" aria-live="polite" className="min-h-[680px]">
+      <CardHeader>
+        <div>
+          <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+            Memo
+          </p>
+          <CardTitle className="mt-2 text-xl">
+            {selectedRun ? "Decision memo" : "No run yet"}
+          </CardTitle>
+        </div>
+        {selectedRun ? (
+          <CardAction className="flex flex-wrap justify-end gap-2">
+            <Button asChild size="sm" variant="outline">
+              <a href={`/api/runs/${selectedRun.runId}/export/memo`}>
+                <Download className="size-3.5" />
+                Export memo
+              </a>
+            </Button>
+            <Button size="sm" type="button" variant="outline" onClick={onReplay}>
+              <RotateCcw className="size-3.5" />
+              Replay run
+            </Button>
+            <Button size="sm" type="button" variant="outline" onClick={onCompareLatest}>
+              <GitCompareArrows className="size-3.5" />
+              Compare latest
+            </Button>
+          </CardAction>
+        ) : null}
+      </CardHeader>
+
+      <CardContent>
+        {selectedRun ? (
+          <>
+            <div className="max-w-[68ch] space-y-5 text-[0.98rem] leading-7">
+              {memoSections.map((section) => renderMemoSection(section))}
+            </div>
+            <ArtifactInspector
+              activeTab={activeTab}
+              bundle={bundle}
+              isLoading={isLoadingBundle}
+              onAnnotateEvidence={onAnnotateEvidence}
+              onChangeTab={onChangeTab}
+              onReviewClaim={onReviewClaim}
+            />
+            <ReviewSummary review={review} runId={selectedRun.runId} />
+            {comparison ? <ComparisonSummary comparison={comparison} /> : null}
+          </>
+        ) : (
+          <div className="grid min-h-36 place-items-center rounded-lg border border-dashed bg-muted/35 p-8 text-center text-sm text-muted-foreground">
+            Ask a question to create the first inspectable Crux run.
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -687,28 +936,37 @@ function ArtifactInspector({
   onReviewClaim: (claimId: string, status: "approved" | "rejected") => void;
 }) {
   return (
-    <section className="artifact-inspector" aria-label="Artifact inspector">
-      <div className="tab-list" role="tablist" aria-label="Artifact tabs">
+    <section className="mt-8 border-t pt-5" aria-label="Artifact inspector">
+      <Tabs value={activeTab} onValueChange={(value) => onChangeTab(value as ArtifactTab)}>
+        <TabsList
+          aria-label="Artifact tabs"
+          className="!h-auto w-full flex-wrap justify-start gap-2 bg-transparent p-0 pb-1"
+          variant="line"
+        >
+          {artifactTabs.map((tab) => (
+            <TabsTrigger
+              className="h-9 flex-none rounded-lg border bg-background px-3"
+              key={tab}
+              value={tab}
+              onClick={() => onChangeTab(tab)}
+            >
+              {tab}
+            </TabsTrigger>
+          ))}
+        </TabsList>
         {artifactTabs.map((tab) => (
-          <button
-            aria-selected={activeTab === tab}
-            className="tab-button"
-            key={tab}
-            onClick={() => onChangeTab(tab)}
-            role="tab"
-            type="button"
-          >
-            {tab}
-          </button>
+          <TabsContent className="mt-4" key={tab} value={tab}>
+            {isLoading ? (
+              <div className="grid gap-2">
+                <Skeleton className="h-16" />
+                <Skeleton className="h-16" />
+              </div>
+            ) : (
+              renderArtifactTab(tab, bundle, onReviewClaim, onAnnotateEvidence)
+            )}
+          </TabsContent>
         ))}
-      </div>
-      <div className="artifact-body" role="tabpanel">
-        {isLoading ? (
-          <p className="quiet-copy">Loading run bundle.</p>
-        ) : (
-          renderArtifactTab(activeTab, bundle, onReviewClaim, onAnnotateEvidence)
-        )}
-      </div>
+      </Tabs>
     </section>
   );
 }
@@ -720,12 +978,12 @@ function renderArtifactTab(
   onAnnotateEvidence: (evidenceId: string) => void,
 ) {
   if (!bundle) {
-    return <p className="quiet-copy">Select or create a run to inspect artifacts.</p>;
+    return <p className="text-sm text-muted-foreground">Select or create a run to inspect artifacts.</p>;
   }
 
   switch (tab) {
     case "Memo":
-      return <pre className="artifact-pre">{bundle.memo}</pre>;
+      return <JsonArtifact value={bundle.memo} />;
     case "Claims":
       return renderClaims(bundle.artifacts.claims, onReviewClaim);
     case "Evidence":
@@ -754,31 +1012,40 @@ function renderClaims(
   }
 
   return (
-    <div className="artifact-list">
+    <ItemGroup>
       {claims.map((claim, index) => {
         const record = asRecord(claim);
         const id = stringField(record, "id") ?? `claim-${index + 1}`;
         const text = stringField(record, "text") ?? stringField(record, "claim") ?? id;
         const confidence = numberField(record, "confidence");
         return (
-          <article className="artifact-row" key={id}>
-            <div>
-              <strong>{text}</strong>
-              <span>{id}</span>
-            </div>
-            <div className="row-actions">
-              <button type="button" onClick={() => onReviewClaim(id, "approved")}>
+          <Item
+            className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 2xl:grid-cols-[auto_minmax(0,1fr)_auto]"
+            key={id}
+            variant="outline"
+          >
+            <ItemMediaIcon icon={SearchCheck} />
+            <ItemContent>
+              <ItemTitle className="line-clamp-none">{text}</ItemTitle>
+              <ItemDescription className="font-mono">{id}</ItemDescription>
+            </ItemContent>
+            <ItemActions className="col-span-2 grid gap-2 2xl:col-span-1 2xl:flex 2xl:flex-wrap 2xl:justify-end">
+              <Button className="w-full whitespace-normal 2xl:w-auto" size="sm" type="button" variant="outline" onClick={() => onReviewClaim(id, "approved")}>
+                <Check className="size-3.5" />
                 Approve {id}
-              </button>
-              <button type="button" onClick={() => onReviewClaim(id, "rejected")}>
+              </Button>
+              <Button className="w-full whitespace-normal 2xl:w-auto" size="sm" type="button" variant="outline" onClick={() => onReviewClaim(id, "rejected")}>
+                <X className="size-3.5" />
                 Reject {id}
-              </button>
-            </div>
-            {confidence === undefined ? null : <small>{formatConfidence(confidence)}</small>}
-          </article>
+              </Button>
+              {confidence === undefined ? null : (
+                <Badge variant="secondary">{formatConfidence(confidence)}</Badge>
+              )}
+            </ItemActions>
+          </Item>
         );
       })}
-    </div>
+    </ItemGroup>
   );
 }
 
@@ -793,26 +1060,35 @@ function renderEvidence(
   }
 
   return (
-    <div className="artifact-list">
+    <ItemGroup>
       {evidence.map((item, index) => {
         const record = asRecord(item);
         const id = stringField(record, "id") ?? `evidence-${index + 1}`;
         const summary = stringField(record, "summary") ?? stringField(record, "text") ?? id;
         const relevance = numberField(record, "relevance");
         return (
-          <article className="artifact-row" key={id}>
-            <div>
-              <strong>{summary}</strong>
-              <span>{id}</span>
-            </div>
-            <button type="button" onClick={() => onAnnotateEvidence(id)}>
-              Annotate {id}
-            </button>
-            {relevance === undefined ? null : <small>{formatConfidence(relevance)}</small>}
-          </article>
+          <Item
+            className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 2xl:grid-cols-[auto_minmax(0,1fr)_auto]"
+            key={id}
+            variant="outline"
+          >
+            <ItemMediaIcon icon={FileText} />
+            <ItemContent>
+              <ItemTitle className="line-clamp-none">{summary}</ItemTitle>
+              <ItemDescription className="font-mono">{id}</ItemDescription>
+            </ItemContent>
+            <ItemActions className="col-span-2 grid gap-2 2xl:col-span-1 2xl:flex 2xl:flex-wrap 2xl:justify-end">
+              <Button className="w-full whitespace-normal 2xl:w-auto" size="sm" type="button" variant="outline" onClick={() => onAnnotateEvidence(id)}>
+                Annotate {id}
+              </Button>
+              {relevance === undefined ? null : (
+                <Badge variant="secondary">{formatConfidence(relevance)}</Badge>
+              )}
+            </ItemActions>
+          </Item>
         );
       })}
-    </div>
+    </ItemGroup>
   );
 }
 
@@ -833,14 +1109,17 @@ function ReviewSummary({
       .join(", ") || "none";
 
   return (
-    <div className={compact ? "review-summary compact" : "review-summary"}>
+    <div className={cn("grid gap-2 rounded-lg border bg-muted/25 p-4 text-sm", compact && "border-0 bg-transparent p-0")}>
       <p>Approved claims: {approved}</p>
       <p>Rejected claims: {rejected}</p>
       <p>Evidence notes: {notes}</p>
       {runId ? (
-        <a className="text-action" href={`/api/runs/${runId}/export/reviewed-memo`}>
-          Export reviewed memo
-        </a>
+        <Button asChild className="w-fit" size="sm" variant="outline">
+          <a href={`/api/runs/${runId}/export/reviewed-memo`}>
+            <Download className="size-3.5" />
+            Export reviewed memo
+          </a>
+        </Button>
       ) : null}
     </div>
   );
@@ -848,18 +1127,18 @@ function ReviewSummary({
 
 function ComparisonSummary({ comparison }: { comparison: RunComparison }) {
   return (
-    <section className="comparison-summary">
-      <h3>Run comparison</h3>
+    <div className="mt-4 grid gap-2 rounded-lg border bg-muted/25 p-4 text-sm">
+      <h3 className="font-semibold">Run comparison</h3>
       <p>Trust movement: {formatConfidence(comparison.trustMovement)}</p>
-      <p>
+      <p className="break-all font-mono text-xs text-muted-foreground">
         {comparison.leftRunId} to {comparison.rightRunId}
       </p>
-      <ul>
+      <ul className="list-inside list-disc">
         {comparison.differences.map((difference) => (
           <li key={difference.path}>{difference.path}</li>
         ))}
       </ul>
-    </section>
+    </div>
   );
 }
 
@@ -873,26 +1152,12 @@ function renderDiagnostics(value: unknown) {
   }
 
   return (
-    <div className="diagnostic-stack">
+    <div className="grid gap-4">
       {blockingIssues.length ? (
-        <div>
-          <h3>Blocking issues</h3>
-          <ul>
-            {blockingIssues.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </div>
+        <DiagnosticList icon={AlertTriangle} items={blockingIssues} title="Blocking issues" />
       ) : null}
       {nextFixes.length ? (
-        <div>
-          <h3>Next fixes</h3>
-          <ul>
-            {nextFixes.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </div>
+        <DiagnosticList icon={ShieldCheck} items={nextFixes} title="Next fixes" />
       ) : null}
     </div>
   );
@@ -906,14 +1171,16 @@ function renderTrace(value: unknown) {
   }
 
   return (
-    <ol className="trace-list">
+    <ol className="grid gap-2">
       {trace.map((event, index) => {
         const record = asRecord(event);
         const stage = stringField(record, "stage") ?? `stage-${index + 1}`;
         const message = stringField(record, "message") ?? stringField(record, "event_type") ?? "";
         return (
-          <li key={`${stage}-${index}`}>
-            <code>{stage}</code>
+          <li className="rounded-lg border bg-muted/25 p-3 text-sm" key={`${stage}-${index}`}>
+            <code className="mr-2 rounded bg-background px-1.5 py-0.5 font-mono text-xs text-primary">
+              {stage}
+            </code>
             <span>{message}</span>
           </li>
         );
@@ -922,18 +1189,127 @@ function renderTrace(value: unknown) {
   );
 }
 
+function DiagnosticList({
+  icon: Icon,
+  items,
+  title,
+}: {
+  icon: typeof AlertTriangle;
+  items: string[];
+  title: string;
+}) {
+  return (
+    <div className="grid gap-2">
+      <h3 className="text-sm font-semibold">{title}</h3>
+      <ItemGroup>
+        {items.map((item) => (
+          <Item key={item} variant="outline">
+            <ItemMediaIcon icon={Icon} />
+            <ItemContent>
+              <ItemTitle className="line-clamp-none">{item}</ItemTitle>
+            </ItemContent>
+          </Item>
+        ))}
+      </ItemGroup>
+    </div>
+  );
+}
+
 function JsonArtifact({ value }: { value: unknown }) {
-  return <pre className="artifact-pre">{JSON.stringify(value ?? null, null, 2)}</pre>;
+  return (
+    <pre className="max-h-96 overflow-auto rounded-lg border bg-muted/35 p-4 font-mono text-xs leading-6 text-foreground">
+      {typeof value === "string" ? value : JSON.stringify(value ?? null, null, 2)}
+    </pre>
+  );
+}
+
+function InspectorCard({
+  children,
+  id,
+  label,
+}: {
+  children: ReactNode;
+  id?: string;
+  label: string;
+}) {
+  return (
+    <Card id={id} size="sm">
+      <CardHeader>
+        <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+          {label}
+        </p>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
+  );
+}
+
+function FactList({
+  items,
+  mono = false,
+}: {
+  items: Array<{ label: string; value: string }>;
+  mono?: boolean;
+}) {
+  return (
+    <dl className="mt-4 grid gap-3 text-sm">
+      {items.map((item) => (
+        <div className="grid gap-0.5" key={item.label}>
+          <dt className="font-medium text-muted-foreground">{item.label}</dt>
+          <dd className={cn("break-words", mono && "font-mono text-xs font-semibold")}>
+            {item.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function ItemMediaIcon({ icon: Icon }: { icon: typeof SearchCheck }) {
+  return (
+    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+      <Icon className="size-4" />
+    </span>
+  );
+}
+
+function TrustBadge({ status }: { status: string }) {
+  const statusClasses: Record<string, string> = {
+    pass: "border-emerald-300 bg-emerald-100 text-emerald-900",
+    warn: "border-amber-300 bg-amber-100 text-amber-950",
+    fail: "border-red-300 bg-red-100 text-red-900",
+    pending: "border-border bg-muted text-muted-foreground",
+  };
+
+  return (
+    <Badge className={cn("shrink-0 uppercase", statusClasses[status] ?? statusClasses.pending)} variant="outline">
+      {status}
+    </Badge>
+  );
+}
+
+function CruxMark() {
+  return (
+    <span className="grid size-7 shrink-0 place-content-center gap-1 rounded-lg bg-primary" aria-hidden="true">
+      <span className="block h-0.5 w-3.5 rounded-full bg-primary-foreground" />
+      <span className="block h-0.5 w-3.5 rounded-full bg-primary-foreground" />
+      <span className="block h-0.5 w-2.5 rounded-full bg-primary-foreground" />
+    </span>
+  );
 }
 
 function renderMemoSection(section: string) {
   if (section.startsWith("## ")) {
-    return <h3 key={section}>{section.replace("## ", "")}</h3>;
+    return (
+      <h3 className="pt-3 text-lg font-semibold tracking-tight" key={section}>
+        {section.replace("## ", "")}
+      </h3>
+    );
   }
 
   if (/^\d\./m.test(section)) {
     return (
-      <ol key={section}>
+      <ol className="list-inside list-decimal space-y-1" key={section}>
         {section
           .split("\n")
           .filter(Boolean)
@@ -989,5 +1365,7 @@ function numberField(record: Record<string, unknown>, field: string): number | u
 
 function stringArrayField(record: Record<string, unknown>, field: string): string[] {
   const value = record[field];
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }

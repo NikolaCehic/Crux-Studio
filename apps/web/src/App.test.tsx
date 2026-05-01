@@ -272,12 +272,22 @@ describe("Crux Studio Ask workflow", () => {
     expect(screen.getByText(/Offline mock run/)).toBeInTheDocument();
   });
 
+  it("preloads the latest run so returning users land on a useful workbench", async () => {
+    render(<App />);
+
+    expect(await screen.findByText("Decision memo")).toBeInTheDocument();
+    expect(screen.getByText("runs/mock-ask/decision_memo.md")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith("/api/runs/mock-ask");
+    });
+  });
+
   it("loads run history and lets the user inspect claims, evidence, diagnostics, and trace", async () => {
     render(<App />);
 
-    expect(await screen.findByText("mock-ask")).toBeInTheDocument();
+    expect((await screen.findAllByText("mock-ask")).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByText("mock-ask"));
+    fireEvent.click(screen.getAllByText("mock-ask")[0]);
     expect(await screen.findByRole("tab", { name: "Claims" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Claims" }));
@@ -316,7 +326,7 @@ describe("Crux Studio Ask workflow", () => {
       );
     });
 
-    fireEvent.click(screen.getByText("mock-ask"));
+    fireEvent.click(screen.getAllByText("mock-ask")[0]);
     fireEvent.click(await screen.findByRole("tab", { name: "Claims" }));
     fireEvent.click(screen.getByRole("button", { name: "Approve claim-1" }));
     expect((await screen.findAllByText(/Approved claims: claim-1/)).length).toBeGreaterThan(

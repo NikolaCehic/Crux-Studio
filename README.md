@@ -72,6 +72,7 @@ Studio keeps the work iterative. Add source material, replay a run, compare the 
 - Attach source packs to runs.
 - See memo preview, trust gate, confidence, answerability, risk, blocking issues, and artifact paths.
 - Load run history from the server.
+- Reopen the latest run automatically when returning to the workspace.
 - Fetch full run bundles after creating or selecting a run.
 - Inspect Memo, Claims, Evidence, Contradictions, Uncertainty, Council, Diagnostics, and Trace tabs.
 - Approve or reject claims during human review.

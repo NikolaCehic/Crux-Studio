@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2 - 2026-05-01
+
+- Migrated the Studio web app onto shadcn UI primitives for buttons, cards, badges, fields, inputs, textareas, native selects, tabs, breadcrumbs, separators, skeletons, scroll areas, and item rows.
+- Added Tailwind CSS v4 and shadcn configuration for the Vite app, including the `@/*` import alias and shared utility helper.
+- Rebuilt the Studio shell with shadcn components while preserving the provider boundary, project/source workflow, review actions, replay, compare, exports, and artifact inspection.
+- Added a returning-user behavior that automatically loads the latest run from history into the workbench.
+- Hardened responsive artifact layouts so claim and evidence actions stack until there is enough width for side-by-side review controls.
+- Rebalanced desktop workbench columns to give the memo and artifact inspector more usable reading width.
+- Refreshed all README screenshots from the running shadcn-based Studio UI.
+- Added TDD coverage for latest-run preload behavior and re-verified the full test, typecheck, build, and browser visual audit path.
+
 ## 0.2.1 - 2026-05-01
 
 - Audited the app against the Desktop `Crux Studio_Design` reference and Impeccable product/design criteria.
