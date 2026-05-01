@@ -1,5 +1,33 @@
 # Trace Log
 
+## 2026-05-01T11:58:00+02:00 - Human-Readable README Rewrite
+
+Intent:
+
+- Make the repository README easier to share with people who have not followed the full Crux Studio build.
+- Explain the product in plain language before the technical details.
+- Preserve practical setup, architecture, quality, and documentation links.
+
+Context checked:
+
+- Verified the running Studio app responds at `http://127.0.0.1:5173`.
+- Reviewed existing README content and screenshot assets under `docs/assets/`.
+
+Implemented:
+
+- Rewrote `README.md` around the product promise: turning agent analysis into inspectable, reviewable decisions.
+- Added clearer sections for what Crux Studio is, why it exists, how it works, product tour, capabilities, local run commands, Crux Harness integration, architecture, quality commands, current boundary, and docs.
+- Kept existing screenshot assets embedded so the README remains visual and shareable.
+
+Verification:
+
+- `git diff --check` passed.
+- Screenshot asset paths referenced by the README exist.
+
+Result:
+
+- The README now reads as a public-facing product overview instead of an internal build note.
+
 ## 2026-05-01T11:46:00+02:00 - shadcn Studio Migration And Final UI Polish
 
 Intent:

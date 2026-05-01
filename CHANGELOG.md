@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3 - 2026-05-01
+
+- Rewrote the README into a human-readable product introduction for sharing Crux Studio with others.
+- Reframed the opening around the product promise, use cases, workflow, screenshots, local run instructions, architecture, and current non-hosted boundary.
+- Kept setup and quality commands available without making the README feel like an internal implementation note.
+
 ## 0.2.2 - 2026-05-01
 
 - Migrated the Studio web app onto shadcn UI primitives for buttons, cards, badges, fields, inputs, textareas, native selects, tabs, breadcrumbs, separators, skeletons, scroll areas, and item rows.

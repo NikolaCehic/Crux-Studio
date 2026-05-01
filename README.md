@@ -1,63 +1,97 @@
 # Crux Studio
 
 <p align="center">
-  <strong>A decision workbench for inspecting, improving, and trusting agent analysis.</strong>
+  <strong>A workbench for turning agent analysis into inspectable, reviewable decisions.</strong>
 </p>
 
 <p align="center">
-  <a href="#run-locally">Run locally</a>
+  <a href="#what-it-is">What it is</a>
   ·
-  <a href="#product-tour">Product tour</a>
+  <a href="#how-it-works">How it works</a>
+  ·
+  <a href="#run-it">Run it</a>
   ·
   <a href="#architecture">Architecture</a>
-  ·
-  <a href="#quality">Quality</a>
 </p>
 
 <p align="center">
-  <img src="docs/assets/crux-studio-workbench.png" alt="Crux Studio workbench with ask form, decision memo, trust gate, artifacts, and review panel" />
+  <img src="docs/assets/crux-studio-workbench.png" alt="Crux Studio workbench with question input, decision memo, trust gate, artifacts, and review panels" />
 </p>
 
-Crux Studio is the product interface for Crux Harness. It is not a chat wrapper. It is a run studio: a structured workspace where teams ask arbitrary questions, attach source context, inspect the resulting analysis, review claims and evidence, rerun with stronger inputs, compare outputs, and export a reviewed memo.
+Crux Studio is a product interface for serious agent analysis.
 
-The goal is simple: make agent analysis auditable enough to use in real operational decisions.
+It is built for the moment after someone asks an AI system an important question and needs more than a fluent answer. Crux Studio turns the answer into a structured run with a memo, claims, evidence, uncertainty, diagnostics, review actions, and a trace of what happened.
 
-## What It Does
+The goal is simple: make agent output easier to trust, challenge, improve, and share.
 
-Crux Studio turns an agent run into a product workflow:
+## What It Is
+
+Crux Studio is not a chat app.
+
+It is a decision workbench. You ask a question, add context, attach source material, run Crux, then inspect the result like a real artifact instead of treating the model response as a black box.
+
+Use it for questions such as:
+
+- Should our support team introduce AI triage before hiring another agent?
+- Which product bet should we prioritize this quarter?
+- What are the risks in this rollout plan?
+- How should we compare two technical approaches?
+- What evidence would change this recommendation?
+
+Crux Studio is useful when an answer needs judgment, provenance, and iteration.
+
+## Why It Exists
+
+Most AI tools optimize for producing an answer quickly.
+
+Crux Studio optimizes for making the answer usable:
+
+- What is the recommendation?
+- What claims does it depend on?
+- What evidence supports those claims?
+- What is uncertain?
+- What could be wrong?
+- What should a human review before acting?
+- What changed after better context was added?
+
+That makes it a better fit for operational decisions, product strategy, technical tradeoffs, policy review, support workflows, market analysis, and internal planning.
+
+## How It Works
 
 ```text
 Ask a question
--> Attach context and source packs
+-> Add context and source material
 -> Run Crux
 -> Read the decision memo
--> Inspect trust, claims, evidence, uncertainty, council, diagnostics, and trace
+-> Inspect claims, evidence, uncertainty, diagnostics, council output, and trace
 -> Review claims and annotate evidence
--> Replay with improved context
+-> Replay with better inputs
 -> Compare runs
 -> Export a reviewed memo
 ```
 
-It is built for analysis that needs judgment, provenance, and iteration. Product strategy, operations, support workflows, internal tooling decisions, technical tradeoffs, market scans, policy reviews, and implementation planning all fit naturally.
-
 ## Product Tour
 
-### Ask, Read, Inspect
+### Ask A Decision-Grade Question
 
-Studio starts with the real working surface: question, context, source policy, source pack, memo, trust gate, and run artifacts in one view.
+Start with a question, practical context, a time horizon, and an optional source pack. Studio keeps the input focused on the decision, not on prompt engineering.
+
+### Inspect The Run
+
+Every run produces a memo plus structured artifacts. You can inspect the trust gate, confidence, answerability, risk, blocking issues, artifact paths, claims, evidence, contradictions, uncertainty, council output, diagnostics, and trace.
 
 ### Review Claims And Evidence
 
-Every run exposes claims, evidence, contradictions, uncertainty, council output, diagnostics, and trace. Claims can be approved or rejected, and evidence can be annotated before a memo is treated as reviewed.
+Claims can be approved or rejected. Evidence can be annotated. The goal is to move from "the agent said this" to "we reviewed what this answer depends on."
 
 <p align="center">
-  <img src="docs/assets/crux-studio-claims-focus.png" alt="Crux Studio claim review controls" width="48%" />
-  <img src="docs/assets/crux-studio-review-compare-focus.png" alt="Crux Studio reviewed memo and run comparison controls" width="48%" />
+  <img src="docs/assets/crux-studio-claims-focus.png" alt="Crux Studio claim review screen" width="48%" />
+  <img src="docs/assets/crux-studio-review-compare-focus.png" alt="Crux Studio reviewed memo and comparison screen" width="48%" />
 </p>
 
 ### Improve And Compare
 
-Studio keeps the work iterative. Add source material, replay a run, compare the latest outputs, and export the reviewed memo once the analysis is strong enough to share.
+Studio supports replaying a run with the same question and context, comparing the latest runs, and exporting a reviewed memo once the analysis is strong enough to share.
 
 <p align="center">
   <img src="docs/assets/crux-studio-review-compare.png" alt="Crux Studio run comparison screenshot" />
@@ -65,25 +99,22 @@ Studio keeps the work iterative. Add source material, replay a run, compare the 
 
 ## Current Capabilities
 
-- Ask arbitrary analysis and decision questions from the Studio UI.
+- Ask arbitrary analysis and decision questions.
 - Organize work into projects.
-- Create source packs from pasted Markdown, TXT, or CSV-style evidence.
-- Persist local source content and pass it through the provider boundary.
+- Create source packs from pasted Markdown, TXT, or CSV-style material.
 - Attach source packs to runs.
-- See memo preview, trust gate, confidence, answerability, risk, blocking issues, and artifact paths.
-- Load run history from the server.
+- Preserve source content through the provider boundary.
 - Reopen the latest run automatically when returning to the workspace.
-- Fetch full run bundles after creating or selecting a run.
-- Inspect Memo, Claims, Evidence, Contradictions, Uncertainty, Council, Diagnostics, and Trace tabs.
-- Approve or reject claims during human review.
-- Annotate evidence from the artifact inspector.
-- Replay a run with the same question and attached source context.
-- Compare the two latest runs and inspect trust movement plus changed fields.
+- Inspect the memo, claims, evidence, contradictions, uncertainty, council output, diagnostics, and trace.
+- Review claims with approve and reject actions.
+- Annotate evidence.
+- Replay runs with the same context.
+- Compare recent runs and see what changed.
 - Open raw Claims, Evidence, and Trace JSON.
 - Export the memo as Markdown.
-- Export a reviewed memo with human review summary included.
+- Export a reviewed memo that includes human review state.
 
-## Run Locally
+## Run It
 
 Install dependencies:
 
@@ -91,13 +122,13 @@ Install dependencies:
 pnpm install
 ```
 
-Run Studio with the fast mock provider:
+Start Studio:
 
 ```bash
 pnpm dev
 ```
 
-Open the app:
+Open:
 
 ```text
 http://127.0.0.1:5173
@@ -109,13 +140,13 @@ The API server runs at:
 http://127.0.0.1:4318
 ```
 
-Local Studio state, including pasted source content, is written to `.studio/studio-state.json` by the server and is intentionally ignored by git.
+Studio state is written to `.studio/studio-state.json`. That file is ignored by git so local runs and pasted source material do not become repository changes.
 
-## Use The Real Harness
+## Use It With Crux Harness
 
-Crux Studio is a separate codebase from `crux-harness`. The web app does not import harness internals. It talks to a server-side provider boundary.
+Crux Studio is a separate codebase from `crux-harness`. The web app talks to a server-side provider interface instead of importing harness internals directly.
 
-Run the server with the local harness provider:
+To run Studio against a local Crux Harness checkout:
 
 ```bash
 CRUX_STUDIO_PROVIDER=local \
@@ -123,10 +154,16 @@ CRUX_HARNESS_ROOT=/Users/nikolacehic/Desktop/crux-harness \
 pnpm --filter @crux-studio/server dev
 ```
 
-In another terminal, run the web app:
+Then run the web app in another terminal:
 
 ```bash
 pnpm --filter @crux-studio/web dev
+```
+
+For fast UI and product work, the default mock provider is enough:
+
+```bash
+pnpm dev
 ```
 
 ## Architecture
@@ -136,27 +173,23 @@ Studio Web UI
 -> Studio Server
 -> CruxProvider interface
 -> MockCruxProvider or LocalCruxHarnessProvider
--> Crux Harness package / SDK / public Node API
+-> Crux Harness
 ```
 
-Repository shape:
+Repository layout:
 
 ```text
 crux-studio/
   apps/
-    web/          React workbench
-    server/       Fastify API and provider adapters
+    web/          React Studio interface
+    server/       API, persistence, provider adapters
   packages/
     crux-provider Shared provider contract
   docs/
-    PRODUCT_SPEC.md
-    UX_SPEC.md
-    ARCHITECTURE_SPEC.md
-    PHASED_PLAN.md
-    TRACE_LOG.md
+    Product, UX, architecture, plan, trace, and screenshot assets
 ```
 
-Important files:
+Key files:
 
 ```text
 apps/web/src/App.tsx
@@ -171,7 +204,7 @@ packages/crux-provider/src/mock.ts
 
 ## Quality
 
-Run the full test suite:
+Run tests:
 
 ```bash
 pnpm test
@@ -183,31 +216,35 @@ Run TypeScript checks:
 pnpm check
 ```
 
-Build the app:
+Build the project:
 
 ```bash
 pnpm build
 ```
 
-The implementation is TDD-first. Product workflow coverage exists across the provider, server, and web layers.
+The project is developed with a TDD-first workflow. Product behavior is covered across the provider package, server API, and web app.
 
-## Non-Hosted Boundary
+## Current Boundary
 
-This stage is intentionally not a hosted control plane. Authentication, teams, permissions, hosted database, object storage, background jobs, deployment observability, and audit logs are out of scope for the current product stage.
+Crux Studio is currently focused on the workbench experience: asking, inspecting, reviewing, replaying, comparing, and exporting runs.
 
-## Traceability
+It is intentionally not a hosted team control plane yet. Authentication, teams, permissions, hosted database, object storage, background jobs, deployment observability, and audit logs are out of scope for this stage.
 
-- Implementation trace: [docs/TRACE_LOG.md](docs/TRACE_LOG.md)
-- Product changelog: [CHANGELOG.md](CHANGELOG.md)
-- Product context: [PRODUCT.md](PRODUCT.md)
-- Design context: [DESIGN.md](DESIGN.md)
-- Product spec: [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md)
-- UX spec: [docs/UX_SPEC.md](docs/UX_SPEC.md)
-- Architecture spec: [docs/ARCHITECTURE_SPEC.md](docs/ARCHITECTURE_SPEC.md)
-- Phased plan: [docs/PHASED_PLAN.md](docs/PHASED_PLAN.md)
+## Documentation
+
+- [Product spec](docs/PRODUCT_SPEC.md)
+- [UX spec](docs/UX_SPEC.md)
+- [Architecture spec](docs/ARCHITECTURE_SPEC.md)
+- [Phased plan](docs/PHASED_PLAN.md)
+- [Trace log](docs/TRACE_LOG.md)
+- [Changelog](CHANGELOG.md)
+- [Product context](PRODUCT.md)
+- [Design context](DESIGN.md)
 
 ## Product Position
 
-Crux Studio is for people who do not just want an answer. They want to see why an answer exists, what evidence holds it up, what could break it, and what changed after better context was added.
+Crux Studio is for people who do not just want an answer.
 
-That is the product: not more agent output, but more usable agent judgment.
+They want to know why the answer exists, what evidence holds it up, what could break it, and what changed after better context was added.
+
+That is the product: more usable agent judgment.
