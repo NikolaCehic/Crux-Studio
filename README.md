@@ -68,7 +68,8 @@ Ask a question
 -> Replay with better inputs
 -> Compare runs
 -> Read the project lineage
--> Export a decision package
+-> Assemble the decision record dossier
+-> Export the dossier or decision package
 ```
 
 ## Product Tour
@@ -96,11 +97,15 @@ Claims can be approved or rejected. Evidence can be annotated. The goal is to mo
 
 ### Improve And Compare
 
-Studio supports replaying a run with the same question and context, comparing the latest runs, and exporting a reviewed memo once the analysis is strong enough to share.
+Studio supports replaying a run with the same question and context, comparing the latest runs, reading the decision lineage, and assembling a dossier once the analysis is strong enough to share.
 
 <p align="center">
-  <img src="docs/assets/crux-studio-review-compare.png" alt="Crux Studio run comparison screenshot" />
+  <img src="docs/assets/crux-studio-review-compare.png" alt="Crux Studio decision record dossier and lineage screenshot" />
 </p>
+
+### Export The Dossier
+
+The decision record combines the final recommendation, readiness, trust, source coverage, human review, lineage movement, key artifacts, and memo into one Markdown package.
 
 ## Current Capabilities
 
@@ -118,6 +123,8 @@ Studio supports replaying a run with the same question and context, comparing th
 - Read a decision delta report that explains what changed between two runs, why trust moved, which evidence gaps closed, which blockers remain, and what to do next.
 - Export the decision delta as a Markdown package with the newer memo and human review context.
 - See a project-level decision lineage that connects source packs, runs, evidence tasks, reruns, and decision deltas.
+- Read a project-level decision record dossier that combines the final recommendation, review state, source summary, lineage, latest delta, key artifacts, and next step.
+- Export the decision record dossier as Markdown.
 - Start from canonical demo questions.
 - Inspect the memo, claims, evidence, sources, contradictions, uncertainty, bounded agents, council output, diagnostics, and trace.
 - See run readiness as ready, usable with warnings, or blocked.
@@ -256,7 +263,7 @@ Smoke check a running local Studio:
 pnpm smoke:local
 ```
 
-The smoke check creates source-backed lifecycle jobs, verifies durable lifecycle history, closes an evidence task with a source note, reruns Crux, compares the improved run, exports the delta package, and validates the project lineage.
+The smoke check creates source-backed lifecycle jobs, verifies durable lifecycle history, closes an evidence task with a source note, reruns Crux, compares the improved run, exports the delta package, validates the project lineage, and validates the decision record dossier export.
 
 The project is developed with a TDD-first workflow. Product behavior is covered across the provider package, server API, and web app.
 
@@ -281,6 +288,7 @@ It is intentionally not a hosted team control plane yet. Authentication, teams, 
 - [Phase 14 decision delta report spec](docs/PHASE_14_DECISION_DELTA_REPORT_SPEC.md)
 - [Phase 15 exportable decision delta package spec](docs/PHASE_15_EXPORTABLE_DECISION_DELTA_PACKAGE_SPEC.md)
 - [Phase 16 decision lineage timeline spec](docs/PHASE_16_DECISION_LINEAGE_TIMELINE_SPEC.md)
+- [Phase 17 decision record dossier spec](docs/PHASE_17_DECISION_RECORD_DOSSIER_SPEC.md)
 - [Demo guide](docs/DEMO_GUIDE.md)
 - [Trace log](docs/TRACE_LOG.md)
 - [Changelog](CHANGELOG.md)

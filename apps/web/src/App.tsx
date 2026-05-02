@@ -66,6 +66,7 @@ import {
   createProject,
   createSourcePack,
   exportDecisionDeltaPackage,
+  getProjectDecisionRecord,
   getRunJob,
   getProjectLineage,
   getRun,
@@ -81,6 +82,7 @@ import {
   resolveEvidenceTask,
   reviewClaim,
   startRunJob,
+  type DecisionRecordDossier,
   type DecisionLineage,
   type DecisionLineageEvent,
   type ProviderRegistry,
@@ -179,6 +181,7 @@ export function App() {
   const [evidenceTasks, setEvidenceTasks] = useState<StudioEvidenceTask[]>([]);
   const [comparison, setComparison] = useState<RunComparison | null>(null);
   const [lineage, setLineage] = useState<DecisionLineage | null>(null);
+  const [decisionRecord, setDecisionRecord] = useState<DecisionRecordDossier | null>(null);
   const [jobs, setJobs] = useState<RunJob[]>([]);
   const [activeJob, setActiveJob] = useState<RunJob | null>(null);
   const [activeTab, setActiveTab] = useState<ArtifactTab>("Brief");
@@ -186,7 +189,10 @@ export function App() {
   const [isRunning, setIsRunning] = useState(false);
   const [isLoadingBundle, setIsLoadingBundle] = useState(false);
   const [isLoadingLineage, setIsLoadingLineage] = useState(false);
+  const [isLoadingDecisionRecord, setIsLoadingDecisionRecord] = useState(false);
   const [isExportingDelta, setIsExportingDelta] = useState(false);
+  const lineageRequestId = useRef(0);
+  const decisionRecordRequestId = useRef(0);
 
   const selectedRun = bundle ?? run;
   const activeProvider = providers[0];
@@ -282,7 +288,36 @@ export function App() {
 
   useEffect(() => {
     void refreshLineage(selectedProjectId);
+    void refreshDecisionRecord(selectedProjectId);
   }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (!selectedProjectId || !selectedProject?.runIds.length) {
+      return;
+    }
+
+    if (decisionRecord && (lineage?.summary.runCount ?? 0) > 0) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      if (!decisionRecord && !isLoadingDecisionRecord) {
+        void refreshDecisionRecord(selectedProjectId);
+      }
+      if ((lineage?.summary.runCount ?? 0) === 0 && !isLoadingLineage) {
+        void refreshLineage(selectedProjectId);
+      }
+    }, 1200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    decisionRecord,
+    isLoadingDecisionRecord,
+    isLoadingLineage,
+    lineage?.summary.runCount,
+    selectedProject?.runIds.length,
+    selectedProjectId,
+  ]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -324,7 +359,7 @@ export function App() {
       setActiveTab("Brief");
       setError(null);
       await loadBundle(nextJob.run.runId);
-      await refreshLineage(nextJob.run.projectId ?? selectedProjectId);
+      await refreshProjectDecisionState(nextJob.run.projectId ?? selectedProjectId);
     } else if (nextJob.status === "failed") {
       setError(nextJob.error ?? "Run job failed.");
     } else if (nextJob.status === "cancelled") {
@@ -346,6 +381,10 @@ export function App() {
       setReview(reviewFromBundle(nextBundle));
       setEvidenceTasks(nextEvidenceTasks);
       setRuns((current) => upsertRun(current, nextBundle));
+      if (nextBundle.projectId && nextBundle.projectId !== selectedProjectId) {
+        setSelectedProjectId(nextBundle.projectId);
+      }
+      void refreshProjectDecisionState(nextBundle.projectId ?? selectedProjectId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Run bundle failed to load.");
     } finally {
@@ -354,6 +393,9 @@ export function App() {
   }
 
   async function refreshLineage(projectId: string) {
+    const requestId = lineageRequestId.current + 1;
+    lineageRequestId.current = requestId;
+
     if (!projectId) {
       setLineage(null);
       setIsLoadingLineage(false);
@@ -362,12 +404,53 @@ export function App() {
 
     setIsLoadingLineage(true);
     try {
-      setLineage(await getProjectLineage(projectId));
+      const nextLineage = await getProjectLineage(projectId);
+      if (lineageRequestId.current === requestId) {
+        setLineage(nextLineage);
+      }
     } catch {
-      setLineage(null);
+      if (lineageRequestId.current === requestId) {
+        setLineage(null);
+      }
     } finally {
-      setIsLoadingLineage(false);
+      if (lineageRequestId.current === requestId) {
+        setIsLoadingLineage(false);
+      }
     }
+  }
+
+  async function refreshDecisionRecord(projectId: string) {
+    const requestId = decisionRecordRequestId.current + 1;
+    decisionRecordRequestId.current = requestId;
+
+    if (!projectId) {
+      setDecisionRecord(null);
+      setIsLoadingDecisionRecord(false);
+      return;
+    }
+
+    setIsLoadingDecisionRecord(true);
+    try {
+      const nextDecisionRecord = await getProjectDecisionRecord(projectId);
+      if (decisionRecordRequestId.current === requestId) {
+        setDecisionRecord(nextDecisionRecord);
+      }
+    } catch {
+      if (decisionRecordRequestId.current === requestId) {
+        setDecisionRecord(null);
+      }
+    } finally {
+      if (decisionRecordRequestId.current === requestId) {
+        setIsLoadingDecisionRecord(false);
+      }
+    }
+  }
+
+  async function refreshProjectDecisionState(projectId: string) {
+    await Promise.all([
+      refreshLineage(projectId),
+      refreshDecisionRecord(projectId),
+    ]);
   }
 
   async function handleCreateProject() {
@@ -421,7 +504,7 @@ export function App() {
         });
         setSourcePacks((current) => upsertById(current, pack));
         setSelectedSourcePackId(pack.id);
-        await refreshLineage(project.id);
+        await refreshProjectDecisionState(project.id);
         return;
       }
 
@@ -432,7 +515,7 @@ export function App() {
       });
       setSourcePacks((current) => upsertById(current, pack));
       setSelectedSourcePackId(pack.id);
-      await refreshLineage(projectId);
+      await refreshProjectDecisionState(projectId);
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Source pack creation failed.");
@@ -465,6 +548,7 @@ export function App() {
         rationale: status === "approved" ? "Approved in Studio." : "Rejected in Studio.",
       });
       setReview(nextReview);
+      await refreshDecisionRecord(selectedRun.projectId ?? selectedProjectId);
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Claim review failed.");
@@ -481,6 +565,7 @@ export function App() {
         note: "Annotated in Studio.",
       });
       setReview(nextReview);
+      await refreshDecisionRecord(selectedRun.projectId ?? selectedProjectId);
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Evidence annotation failed.");
@@ -509,7 +594,7 @@ export function App() {
       setSelectedProjectId(result.sourcePack.projectId);
       setSelectedSourcePackId(result.sourcePack.id);
       await applyRunJob(result.job);
-      await refreshLineage(result.sourcePack.projectId);
+      await refreshProjectDecisionState(result.sourcePack.projectId);
       setActiveTab("Brief");
       setError(null);
     } catch (caught) {
@@ -526,6 +611,7 @@ export function App() {
       setRun(replayed);
       setActiveTab("Brief");
       await loadBundle(replayed.runId);
+      await refreshProjectDecisionState(replayed.projectId ?? selectedProjectId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Replay failed.");
     }
@@ -597,7 +683,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.13 · workspace
+              v0.14 · workspace
             </p>
           </div>
         </div>
@@ -799,9 +885,11 @@ export function App() {
             activeTab={activeTab}
             bundle={bundle}
             comparison={comparison}
+            decisionRecord={decisionRecord}
             evidenceTasks={evidenceTasks}
             isExportingDelta={isExportingDelta}
             isLoadingBundle={isLoadingBundle}
+            isLoadingDecisionRecord={isLoadingDecisionRecord}
             isLoadingLineage={isLoadingLineage}
             lineage={lineage}
             review={review}
@@ -1319,9 +1407,11 @@ function MemoPanel({
   activeTab,
   bundle,
   comparison,
+  decisionRecord,
   evidenceTasks,
   isExportingDelta,
   isLoadingBundle,
+  isLoadingDecisionRecord,
   isLoadingLineage,
   lineage,
   review,
@@ -1337,9 +1427,11 @@ function MemoPanel({
   activeTab: ArtifactTab;
   bundle: RunBundle | null;
   comparison: RunComparison | null;
+  decisionRecord: DecisionRecordDossier | null;
   evidenceTasks: StudioEvidenceTask[];
   isExportingDelta: boolean;
   isLoadingBundle: boolean;
+  isLoadingDecisionRecord: boolean;
   isLoadingLineage: boolean;
   lineage: DecisionLineage | null;
   review: StudioReview | null;
@@ -1401,6 +1493,10 @@ function MemoPanel({
               onChangeTab={onChangeTab}
               onResolveEvidenceTask={onResolveEvidenceTask}
               onReviewClaim={onReviewClaim}
+            />
+            <DecisionRecordPanel
+              decisionRecord={decisionRecord}
+              isLoading={isLoadingDecisionRecord}
             />
             <DecisionLineageTimeline
               isLoading={isLoadingLineage}
@@ -2085,6 +2181,106 @@ function ReviewSummary({
         </Button>
       ) : null}
     </div>
+  );
+}
+
+function DecisionRecordPanel({
+  decisionRecord,
+  isLoading,
+}: {
+  decisionRecord: DecisionRecordDossier | null;
+  isLoading: boolean;
+}) {
+  const latestDelta = decisionRecord?.lineage.latestDelta;
+
+  return (
+    <section
+      aria-label="Decision record"
+      className="mt-4 grid gap-4 rounded-lg border bg-background p-4 text-sm"
+      id="decision-record"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+            <FileText className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+              Project dossier
+            </p>
+            <h3 className="mt-1 font-semibold">Decision record</h3>
+            <p className="mt-1 text-muted-foreground">
+              {decisionRecord?.title ?? "A final record appears after a project run is available."}
+            </p>
+          </div>
+        </div>
+        {decisionRecord ? (
+          <Button asChild size="sm" variant="outline">
+            <a href={`/api/projects/${decisionRecord.projectId}/export/decision-record-dossier`}>
+              <Download className="size-3.5" />
+              Export dossier
+            </a>
+          </Button>
+        ) : null}
+      </div>
+
+      {isLoading ? (
+        <div className="grid gap-2">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+        </div>
+      ) : !decisionRecord ? (
+        <p className="rounded-md border border-dashed bg-muted/35 p-3 text-muted-foreground">
+          Select a project with a completed run to assemble a decision record.
+        </p>
+      ) : (
+        <>
+          <div className="grid gap-3 2xl:grid-cols-[minmax(0,1.6fr)_minmax(220px,0.8fr)]">
+            <div className="grid gap-2 rounded-md border bg-muted/25 p-3">
+              <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+                Final recommendation
+              </p>
+              <p className="leading-relaxed">{decisionRecord.recommendation}</p>
+            </div>
+            <div className="grid gap-2 rounded-md border bg-muted/25 p-3">
+              <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+                Current state
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary">{formatStatusText(decisionRecord.readiness.status)}</Badge>
+                <TrustBadge status={decisionRecord.trust.status} />
+                <Badge variant="outline">
+                  {decisionRecord.sourceSummary.sourceCount} sources
+                </Badge>
+              </div>
+              <p className="text-muted-foreground">
+                Latest run: {shortIdentifier(decisionRecord.latestRunId)}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 2xl:grid-cols-3">
+            <LineageMetric
+              label="Human review"
+              value={`Approved claims: ${decisionRecord.review.approvedClaims.join(", ") || "none"}`}
+            />
+            <LineageMetric
+              label="Decision movement"
+              value={latestDelta ? `${latestDelta.title}: ${latestDelta.label}` : "No decision delta yet"}
+            />
+            <LineageMetric
+              label="Next step"
+              value={decisionRecord.nextStep}
+            />
+          </div>
+
+          <div className="grid gap-1 border-t pt-3 font-mono text-[0.68rem] text-muted-foreground">
+            <span>Memo: {decisionRecord.keyArtifacts.memo ?? "none"}</span>
+            <span>Report: {decisionRecord.keyArtifacts.report ?? "none"}</span>
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 

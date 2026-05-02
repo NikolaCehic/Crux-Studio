@@ -1,5 +1,49 @@
 # Trace Log
 
+## 2026-05-02T23:49:09+02:00 - Phase 17 Decision Record Dossier
+
+Intent:
+
+- Implement the next productization phase under the required phase contract: full implementation, E2E/smoke tests, spec validation, artifacts, and next-phase handoff.
+- Turn the latest reviewed run, source summary, project lineage, latest decision delta, key artifacts, and memo into one canonical project-level dossier.
+
+Implemented:
+
+- Added `GET /api/projects/:projectId/decision-record`.
+- Added `GET /api/projects/:projectId/export/decision-record-dossier`.
+- Added dossier derivation from latest project run, stored human review, source workspace summary, project lineage, latest delta, key artifact paths, and final memo.
+- Added Markdown export with final recommendation, decision state, human review, decision lineage, key artifacts, and final memo.
+- Added `dossier` to provider capability reporting.
+- Added Studio API types and fetch helper for project decision records.
+- Added a `Decision record` workbench section with final recommendation, current state, human review, decision movement, next step, key artifacts, and `Export dossier`.
+- Refreshed project dossier state after project selection, completed jobs, source-pack changes, evidence-task resolution, replay, and review actions.
+- Hardened derived project-state refreshes with latest-request guards and retry-on-known-runs recovery so stale first-load responses cannot leave the dossier empty.
+- Expanded local smoke to validate decision-record JSON and Markdown dossier export after a real local evidence-closure workflow.
+- Added `docs/PHASE_17_DECISION_RECORD_DOSSIER_SPEC.md`.
+
+Verification:
+
+- Failing server and web expectations were written first and passed after implementation.
+- Focused server workflow test passed: `pnpm --filter @crux-studio/server test -- --runInBand`.
+- Focused web workflow test passed: `pnpm --filter @crux-studio/web test -- --runInBand`.
+- Full Studio verification passed: `pnpm verify`.
+- Local smoke passed: `pnpm smoke:local`.
+- Final source-backed smoke job: `job-20260502214851-9e53f8e0`.
+- Final source-backed smoke run: `20260502T214851Z-how-should-a-support-team-reduce-first-response-`.
+- Final evidence base run: `20260502T214851Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence task: `task-9686a7ac-12-adversarial-scenario-remove-evidence`.
+- Final evidence closure rerun job: `job-20260502214852-63d93c86`.
+- Final evidence closure rerun: `20260502T214852Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence closure result: task `resolved`, rerun source count `1`, delta direction `improved`, closed gap count `1`, remaining blocker count `0`, comparison differences `7`, delta package bytes `6439`, lineage event count `20`, lineage delta count `1`, dossier approved claims `1`, dossier source count `1`, dossier package bytes `5976`.
+- Refreshed README screenshots:
+  - `docs/assets/crux-studio-workbench.png`
+  - `docs/assets/crux-studio-review-compare.png`
+
+Result:
+
+- Phase 17 is done.
+- Next phase: Phase 18 Decision Record Acceptance Gate.
+
 ## 2026-05-02T22:55:59+02:00 - Phase 16 Decision Lineage Timeline
 
 Intent:

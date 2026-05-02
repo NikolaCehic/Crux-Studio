@@ -22,15 +22,16 @@ Every phase must complete these steps before it is considered done:
 - Phase 14: Decision Delta Report, implemented in Studio v0.11.
 - Phase 15: Exportable Decision Delta Package, implemented in Studio v0.12.
 - Phase 16: Decision Lineage Timeline, implemented in Studio v0.13.
+- Phase 17: Decision Record Dossier, implemented in Studio v0.14.
 
 ## Next Phase
 
-Phase 17: Decision Record Dossier.
+Phase 18: Decision Record Acceptance Gate.
 
 Goal:
 
-- Turn the latest reviewed run, decision delta, and lineage into one canonical project decision record.
+- Add an explicit acceptance checklist for whether a dossier is ready to act on, share, or needs more evidence.
 
 Why this is next:
 
-- Studio can now show how a decision matured. The next product gap is creating a single durable dossier that combines the final recommendation, review state, evidence closure history, lineage, and export-ready decision context.
+- Studio can now assemble the final dossier. The next product gap is making readiness to act explicit with a gate that checks review state, source coverage, blockers, lineage movement, and export completeness.

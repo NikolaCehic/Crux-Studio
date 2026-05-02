@@ -17,7 +17,7 @@ The correct UX is a Run Studio:
 - inspect the run
 - improve the run
 - compare runs
-- export reviewed output
+- export reviewed output and decision records
 
 ## Primary Users
 
@@ -36,6 +36,7 @@ The correct UX is a Run Studio:
 5. Add sources or context when the trust gate fails.
 6. Review, annotate, and export the final memo.
 7. Compare a newer run to an older run.
+8. Assemble a decision record that can be shared without reconstructing separate tabs.
 
 ## Non-Goals
 
@@ -67,6 +68,8 @@ The correct UX is a Run Studio:
 - Diagnostic: actionable failure classification.
 - Review: human decision on claims/evidence.
 - Comparison: diff between two runs.
+- Lineage: project-level chain of runs, evidence tasks, reruns, and deltas.
+- Decision record: derived project dossier for the current recommendation, review state, source state, lineage, artifacts, and final memo.
 
 ## Success Criteria
 
@@ -85,4 +88,3 @@ Crux Studio v0.1 succeeds when a user can:
 Crux Studio should become the control room for auditable analysis agents.
 
 Research agents, source connectors, LLM providers, and vertical packs can plug into the harness. Studio should remain the human-facing place where runs are created, inspected, corrected, and trusted.
-

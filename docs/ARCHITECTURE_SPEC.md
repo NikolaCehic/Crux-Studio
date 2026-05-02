@@ -138,6 +138,8 @@ POST   /api/runs/jobs/:jobId/retry
 GET    /api/runs/:runId/evidence-tasks
 POST   /api/runs/:runId/evidence-tasks/:taskId/resolve
 GET    /api/projects/:projectId/lineage
+GET    /api/projects/:projectId/decision-record
+GET    /api/projects/:projectId/export/decision-record-dossier
 GET    /api/runs
 GET    /api/runs/:runId
 GET    /api/runs/:runId/artifacts/:artifact
@@ -154,6 +156,10 @@ POST   /api/runs/compare/export/decision-delta-package
 `POST /api/runs/compare/export/decision-delta-package` returns a Markdown package for the same comparison, including the delta, review summaries, changed artifact paths, and the newer memo.
 
 `GET /api/projects/:projectId/lineage` returns a chronological project timeline built from source packs, runs, stored evidence tasks, evidence-task resolutions, rerun jobs, and decision delta availability.
+
+`GET /api/projects/:projectId/decision-record` returns a derived project dossier built from the latest run, stored review, source summary, key artifacts, project lineage, and latest decision delta.
+
+`GET /api/projects/:projectId/export/decision-record-dossier` returns a Markdown dossier with final recommendation, decision state, human review, lineage, key artifacts, and final memo.
 
 ## Run Bundle Shape For UI
 
@@ -192,6 +198,7 @@ v0.1:
 - run comparison creates a decision delta report for before and after evidence closure movement
 - comparison export creates a portable Markdown decision delta package
 - project lineage derives a readable decision timeline from durable local state
+- decision record dossiers combine the latest run, review state, lineage, source summary, key artifacts, and memo into one exportable record
 - no hosted database yet
 
 v0.2:

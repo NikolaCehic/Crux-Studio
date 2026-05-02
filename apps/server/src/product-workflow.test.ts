@@ -453,6 +453,75 @@ describe("Studio product workflow API", () => {
     expect(eventTypes.indexOf("evidence_task_opened")).toBeLessThan(
       eventTypes.indexOf("decision_delta_available"),
     );
+
+    const latestReviewResponse = await app.inject({
+      method: "POST",
+      url: `/api/runs/${completedJob.run.runId}/review/claims`,
+      payload: {
+        claimId: "claim-1",
+        status: "approved",
+        reviewer: "Nikola",
+        rationale: "Ready for the decision record after source-backed rerun.",
+      },
+    });
+    expect(latestReviewResponse.statusCode).toBe(201);
+
+    const dossierResponse = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/decision-record`,
+    });
+    expect(dossierResponse.statusCode).toBe(200);
+    const dossier = dossierResponse.json();
+    expect(dossier).toEqual(
+      expect.objectContaining({
+        projectId: project.id,
+        projectName: "Support Ops",
+        title: "Decision Record Dossier",
+        latestRunId: completedJob.run.runId,
+        question: completedJob.run.question,
+        readiness: expect.objectContaining({
+          status: "ready",
+          label: "Ready for review",
+        }),
+        trust: expect.objectContaining({
+          status: "pass",
+        }),
+        review: expect.objectContaining({
+          approvedClaims: ["claim-1"],
+          rejectedClaims: [],
+        }),
+        lineage: expect.objectContaining({
+          eventCount: lineage.events.length,
+          deltaCount: 1,
+          latestDelta: expect.objectContaining({
+            direction: "improved",
+          }),
+        }),
+      }),
+    );
+    expect(dossier.recommendation).toContain("Use a staged approach");
+    expect(dossier.nextStep).toBe("Review claims and export the decision package.");
+    expect(dossier.sourceSummary.sourceCount).toBe(1);
+    expect(dossier.keyArtifacts).toEqual(
+      expect.objectContaining({
+        memo: completedJob.run.paths.decisionMemo,
+      }),
+    );
+
+    const dossierExportResponse = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/export/decision-record-dossier`,
+    });
+    expect(dossierExportResponse.statusCode).toBe(200);
+    expect(dossierExportResponse.headers["content-type"]).toContain("text/markdown");
+    expect(dossierExportResponse.headers["content-disposition"]).toContain("decision-record-dossier");
+    expect(dossierExportResponse.body).toContain("# Crux Decision Record Dossier");
+    expect(dossierExportResponse.body).toContain("## Final Recommendation");
+    expect(dossierExportResponse.body).toContain("## Human Review");
+    expect(dossierExportResponse.body).toContain("Approved claims: claim-1");
+    expect(dossierExportResponse.body).toContain("## Decision Lineage");
+    expect(dossierExportResponse.body).toContain("Decision delta ready");
+    expect(dossierExportResponse.body).toContain("## Final Memo");
   });
 });
 

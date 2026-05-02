@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.0 - 2026-05-02
+
+- Added project-level decision records through `GET /api/projects/:projectId/decision-record`.
+- Added Markdown dossier export through `GET /api/projects/:projectId/export/decision-record-dossier`.
+- Decision records now combine latest run state, final recommendation, source summary, human review, decision lineage, latest delta, key artifacts, and next step.
+- Added a Studio `Decision record` workbench section with dossier summary, current state, human review, decision movement, key artifact paths, and export action.
+- Added `dossier` to provider capability reporting.
+- Expanded local smoke to verify decision record JSON and Markdown export after a real evidence-closure workflow.
+- Added the Phase 17 decision record dossier spec artifact.
+
 ## 0.13.0 - 2026-05-02
 
 - Added project-level decision lineage through `GET /api/projects/:projectId/lineage`.

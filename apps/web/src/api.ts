@@ -144,6 +144,42 @@ export type DecisionLineage = {
   events: DecisionLineageEvent[];
 };
 
+export type DecisionRecordDossier = {
+  projectId: string;
+  projectName: string;
+  title: "Decision Record Dossier";
+  latestRunId: string;
+  question: string;
+  createdAt: string;
+  recommendation: string;
+  nextStep: string;
+  readiness: RunSummary["readiness"];
+  trust: RunSummary["trust"];
+  sourceSummary: {
+    sourceCount: number;
+    sourceChunkCount: number;
+    missingEvidence: string[];
+    sourcePackName?: string;
+  };
+  review: StudioReview["summary"];
+  lineage: {
+    eventCount: number;
+    deltaCount: number;
+    latestDelta?: NonNullable<DecisionLineageEvent["delta"]> & {
+      title: string;
+      detail: string;
+      leftRunId?: string;
+      rightRunId?: string;
+    };
+  };
+  keyArtifacts: {
+    input?: string;
+    memo?: string;
+    report?: string;
+  };
+  memo?: string;
+};
+
 export type ProviderRegistry = {
   providers: Array<{
     id: string;
@@ -219,6 +255,13 @@ export async function getProjectLineage(projectId: string): Promise<DecisionLine
   return getJson(
     `/api/projects/${encodeURIComponent(projectId)}/lineage`,
     "Decision lineage failed to load.",
+  );
+}
+
+export async function getProjectDecisionRecord(projectId: string): Promise<DecisionRecordDossier> {
+  return getJson(
+    `/api/projects/${encodeURIComponent(projectId)}/decision-record`,
+    "Decision record failed to load.",
   );
 }
 

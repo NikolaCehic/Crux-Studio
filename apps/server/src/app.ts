@@ -385,6 +385,7 @@ export function buildServer({
           "readiness",
           "export",
           "lineage",
+          "dossier",
         ],
       },
     ],
@@ -479,39 +480,53 @@ export function buildServer({
   app.get<{ Params: { projectId: string } }>(
     "/api/projects/:projectId/lineage",
     async (request, reply) => {
-      const project = (await store.listProjects()).find(
-        (item) => item.id === request.params.projectId,
-      );
-      if (!project) {
-        return reply.code(404).send({ message: "Project not found." });
-      }
-
       try {
-        const projectRuns = sortRunsNewestFirst(
-          await store.listProjectRuns(project.id, await provider.listRuns()),
-        );
-        const [bundles, sourcePacks, evidenceTasks, jobs] = await Promise.all([
-          Promise.all(projectRuns.map((run) => provider.getRun(run.runId))),
-          store.listSourcePacks(project.id),
-          Promise.all(
-            projectRuns.map((run) =>
-              store.listEvidenceTasks(run.runId).catch(() => [] as StudioEvidenceTask[]),
-            ),
-          ).then((items) => items.flat()),
-          listRunJobs(),
-        ]);
+        const context = await loadProjectDecisionContext(request.params.projectId);
+        if (!context) {
+          return reply.code(404).send({ message: "Project not found." });
+        }
 
-        return buildDecisionLineage({
-          project,
-          runs: bundles.map((bundle) =>
-            enrichRun(bundle, projectRuns.find((run) => run.runId === bundle.runId)),
-          ),
-          sourcePacks,
-          evidenceTasks,
-          jobs,
-        });
+        return context.lineage;
       } catch {
         return reply.code(404).send({ message: "Project lineage failed to load." });
+      }
+    },
+  );
+
+  app.get<{ Params: { projectId: string } }>(
+    "/api/projects/:projectId/decision-record",
+    async (request, reply) => {
+      try {
+        const dossier = await buildProjectDecisionRecordDossier(request.params.projectId);
+        if (!dossier) {
+          return reply.code(404).send({ message: "Decision record requires a project run." });
+        }
+
+        return dossier;
+      } catch {
+        return reply.code(404).send({ message: "Decision record failed to load." });
+      }
+    },
+  );
+
+  app.get<{ Params: { projectId: string } }>(
+    "/api/projects/:projectId/export/decision-record-dossier",
+    async (request, reply) => {
+      try {
+        const dossier = await buildProjectDecisionRecordDossier(request.params.projectId);
+        if (!dossier) {
+          return reply.code(404).send({ message: "Decision record requires a project run." });
+        }
+
+        return reply
+          .type("text/markdown; charset=utf-8")
+          .header(
+            "content-disposition",
+            `attachment; filename="${safeFilename(dossier.projectName)}-decision-record-dossier.md"`,
+          )
+          .send(renderDecisionRecordDossier(dossier));
+      } catch {
+        return reply.code(404).send({ message: "Decision record export failed." });
       }
     },
   );
@@ -874,6 +889,62 @@ export function buildServer({
       .map((task) => task.title);
   }
 
+  async function loadProjectDecisionContext(projectId: string) {
+    const project = (await store.listProjects()).find((item) => item.id === projectId);
+    if (!project) {
+      return null;
+    }
+
+    const projectRuns = sortRunsNewestFirst(
+      await store.listProjectRuns(project.id, await provider.listRuns()),
+    );
+    const [bundles, sourcePacks, evidenceTasks, jobs] = await Promise.all([
+      Promise.all(projectRuns.map((run) => provider.getRun(run.runId))),
+      store.listSourcePacks(project.id),
+      Promise.all(
+        projectRuns.map((run) =>
+          store.listEvidenceTasks(run.runId).catch(() => [] as StudioEvidenceTask[]),
+        ),
+      ).then((items) => items.flat()),
+      listRunJobs(),
+    ]);
+    const runs = bundles.map((bundle) =>
+      enrichRun(bundle, projectRuns.find((run) => run.runId === bundle.runId)),
+    );
+    const lineage = buildDecisionLineage({
+      project,
+      runs,
+      sourcePacks,
+      evidenceTasks,
+      jobs,
+    });
+
+    return {
+      project,
+      runs,
+      sourcePacks,
+      evidenceTasks,
+      jobs,
+      lineage,
+    };
+  }
+
+  async function buildProjectDecisionRecordDossier(projectId: string) {
+    const context = await loadProjectDecisionContext(projectId);
+    const latestRun = context ? sortRunsNewestFirst(context.runs)[0] : undefined;
+    if (!context || !latestRun) {
+      return null;
+    }
+
+    return buildDecisionRecordDossier({
+      project: context.project,
+      latestRun,
+      sourcePacks: context.sourcePacks,
+      review: await store.getReview(latestRun.runId),
+      lineage: context.lineage,
+    });
+  }
+
   return app;
 }
 
@@ -928,6 +999,42 @@ type DecisionLineage = {
     nextStep: string;
   };
   events: DecisionLineageEvent[];
+};
+
+type DecisionRecordDossier = {
+  projectId: string;
+  projectName: string;
+  title: "Decision Record Dossier";
+  latestRunId: string;
+  question: string;
+  createdAt: string;
+  recommendation: string;
+  nextStep: string;
+  readiness: RunLike["readiness"];
+  trust: RunLike["trust"];
+  sourceSummary: {
+    sourceCount: number;
+    sourceChunkCount: number;
+    missingEvidence: string[];
+    sourcePackName?: string;
+  };
+  review: Awaited<ReturnType<StudioStore["getReview"]>>["summary"];
+  lineage: {
+    eventCount: number;
+    deltaCount: number;
+    latestDelta?: NonNullable<DecisionLineageEvent["delta"]> & {
+      title: string;
+      detail: string;
+      leftRunId?: string;
+      rightRunId?: string;
+    };
+  };
+  keyArtifacts: {
+    input?: string;
+    memo?: string;
+    report?: string;
+  };
+  memo: string;
 };
 
 function enrichRun<T extends { runId: string }>(
@@ -1116,6 +1223,67 @@ function buildDecisionLineage({
         "Create a run, close evidence gaps, and compare the next decision state.",
     },
     events: sortedEvents,
+  };
+}
+
+function buildDecisionRecordDossier({
+  project,
+  latestRun,
+  sourcePacks,
+  review,
+  lineage,
+}: {
+  project: StudioProject;
+  latestRun: RunLike & { projectId?: string; sourcePackId?: string };
+  sourcePacks: StudioSourcePack[];
+  review: Awaited<ReturnType<StudioStore["getReview"]>>;
+  lineage: DecisionLineage;
+}): DecisionRecordDossier {
+  const latestDeltaEvent = [...lineage.events]
+    .reverse()
+    .find((event) => event.type === "decision_delta_available" && event.delta);
+  const linkedSourcePack = sourcePacks.find((pack) => pack.id === latestRun.sourcePackId);
+  const sourceWorkspace = latestRun.sourceWorkspace;
+
+  return {
+    projectId: project.id,
+    projectName: project.name,
+    title: "Decision Record Dossier",
+    latestRunId: latestRun.runId,
+    question: latestRun.question,
+    createdAt: new Date().toISOString(),
+    recommendation: extractMemoSection(latestRun.memo, "Recommendation") ?? firstMemoParagraph(latestRun.memo),
+    nextStep: latestDeltaEvent?.delta?.nextStep ??
+      latestRun.readiness.nextAction ??
+      lineage.summary.nextStep,
+    readiness: latestRun.readiness,
+    trust: latestRun.trust,
+    sourceSummary: {
+      sourceCount: sourceWorkspace?.sourceCount ?? 0,
+      sourceChunkCount: sourceWorkspace?.sourceChunkCount ?? 0,
+      missingEvidence: sourceWorkspace?.missingEvidence ?? [],
+      sourcePackName: sourceWorkspace?.sourcePackName ?? linkedSourcePack?.name,
+    },
+    review: review.summary,
+    lineage: {
+      eventCount: lineage.events.length,
+      deltaCount: lineage.summary.deltaCount,
+      latestDelta: latestDeltaEvent?.delta
+        ? {
+            ...latestDeltaEvent.delta,
+            title: latestDeltaEvent.title,
+            detail: latestDeltaEvent.detail,
+            leftRunId: latestDeltaEvent.leftRunId,
+            rightRunId: latestDeltaEvent.rightRunId,
+          }
+        : undefined,
+    },
+    keyArtifacts: {
+      input: latestRun.paths.generatedInput,
+      memo: latestRun.paths.decisionMemo,
+      report: latestRun.paths.htmlReport,
+    },
+    memo: latestRun.memo,
   };
 }
 
@@ -1381,6 +1549,58 @@ ${markdownList(comparison.differences.map((difference) => difference.path))}
 ## Newer Run Decision Memo
 
 ${right.memo}`;
+}
+
+function renderDecisionRecordDossier(dossier: DecisionRecordDossier): string {
+  const latestDelta = dossier.lineage.latestDelta;
+  const review = dossier.review;
+
+  return `# Crux Decision Record Dossier
+
+Project: ${dossier.projectName}
+Latest run: ${dossier.latestRunId}
+Question: ${dossier.question}
+Created: ${dossier.createdAt}
+
+## Final Recommendation
+
+${dossier.recommendation}
+
+## Decision State
+
+- Readiness: ${dossier.readiness.label} (${dossier.readiness.status})
+- Trust: ${dossier.trust.status} (${dossier.trust.confidence})
+- Sources: ${dossier.sourceSummary.sourceCount} sources, ${dossier.sourceSummary.sourceChunkCount} chunks
+- Missing evidence: ${dossier.sourceSummary.missingEvidence.join(", ") || "none"}
+- Next step: ${dossier.nextStep}
+
+## Human Review
+
+Approved claims: ${review.approvedClaims.join(", ") || "none"}
+Rejected claims: ${review.rejectedClaims.join(", ") || "none"}
+Evidence annotations: ${
+    review.evidenceAnnotations
+      .map((item) => `${item.evidenceId} (${item.noteCount})`)
+      .join(", ") || "none"
+  }
+
+## Decision Lineage
+
+- Events: ${dossier.lineage.eventCount}
+- Decision deltas: ${dossier.lineage.deltaCount}
+- Latest delta: ${latestDelta ? `${latestDelta.title}: ${latestDelta.detail}` : "none"}
+- Delta movement: ${latestDelta?.direction ?? "none"}
+- Delta next step: ${latestDelta?.nextStep ?? "none"}
+
+## Key Artifacts
+
+- Input: ${dossier.keyArtifacts.input ?? "none"}
+- Memo: ${dossier.keyArtifacts.memo ?? "none"}
+- Report: ${dossier.keyArtifacts.report ?? "none"}
+
+## Final Memo
+
+${dossier.memo}`;
 }
 
 function compareRunBundles(
@@ -1654,6 +1874,31 @@ function joinSentence(items: string[]) {
   }
 
   return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
+function extractMemoSection(memo: string, heading: string) {
+  const pattern = new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "im");
+  const match = pattern.exec(memo);
+  if (!match) {
+    return undefined;
+  }
+
+  const rest = memo.slice(match.index + match[0].length);
+  const nextHeadingIndex = rest.search(/^##\s+/m);
+  return normalizeMemoText(nextHeadingIndex >= 0 ? rest.slice(0, nextHeadingIndex) : rest);
+}
+
+function firstMemoParagraph(memo: string) {
+  return normalizeMemoText(memo.replace(/^#+\s+.+$/gm, "")).split(/\n{2,}/)[0] ??
+    "No recommendation text was available.";
+}
+
+function normalizeMemoText(value: string) {
+  return value.trim().replace(/\n{3,}/g, "\n\n") || "No recommendation text was available.";
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function markdownList(items: string[]) {

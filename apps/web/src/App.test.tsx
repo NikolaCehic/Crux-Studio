@@ -279,14 +279,17 @@ const mockResolvedEvidenceTask = {
 
 const mockLineage = {
   projectId: "project-bakery",
+  projectName: "Bakery Operations",
   summary: {
     runCount: 2,
     sourcePackCount: 1,
     evidenceTaskCount: 1,
     resolvedTaskCount: 1,
+    openTaskCount: 0,
     deltaCount: 1,
     latestRunId: "mock-replay",
     latestReadiness: "ready",
+    latestTrust: "pass",
     nextStep: "Review claims and export the decision package.",
   },
   events: [
@@ -351,6 +354,54 @@ const mockLineage = {
       },
     },
   ],
+};
+
+const mockDossier = {
+  projectId: "project-bakery",
+  projectName: "Bakery Operations",
+  title: "Decision Record Dossier",
+  latestRunId: "mock-replay",
+  question: "How should a support team reduce first-response time?",
+  createdAt: "2026-05-01T10:00:05.000Z",
+  recommendation:
+    "Use a staged approach: clarify the queue policy, automate routing, and measure response-time movement daily.",
+  nextStep: "Review claims and export the decision package.",
+  readiness: {
+    status: "ready",
+    label: "Ready for review",
+    reason: "Source-backed rerun is ready for review.",
+    blockerCount: 0,
+    nextAction: "Review claims and export the decision package.",
+  },
+  trust: {
+    status: "pass",
+    confidence: 0.78,
+    blockingIssues: [],
+  },
+  sourceSummary: {
+    sourceCount: 1,
+    sourceChunkCount: 2,
+    missingEvidence: [],
+    sourcePackName: "Wholesale intake notes",
+  },
+  review: mockReview.summary,
+  lineage: {
+    eventCount: 5,
+    deltaCount: 1,
+    latestDelta: {
+      direction: "improved",
+      label: "+10 pts",
+      nextStep: "Review claims and export the decision package.",
+      closedGapCount: 1,
+      remainingBlockerCount: 0,
+      sourceCountDelta: 1,
+    },
+  },
+  keyArtifacts: {
+    input: "runs/query-inputs/mock-ask.yaml",
+    memo: "runs/mock-replay/decision_memo.md",
+    report: "runs/mock-replay/run_report.html",
+  },
 };
 
 describe("Crux Studio Ask workflow", () => {
@@ -452,6 +503,26 @@ describe("Crux Studio Ask workflow", () => {
           });
         }
 
+        if (url.endsWith("/api/projects/project-bakery/decision-record")) {
+          return new Response(JSON.stringify(mockDossier), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url.endsWith("/api/projects/project-bakery/export/decision-record-dossier")) {
+          return new Response(
+            "# Crux Decision Record Dossier\n\n## Final Recommendation\n\nUse a staged approach.",
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "text/markdown; charset=utf-8",
+                "Content-Disposition": "attachment; filename=\"bakery-operations-decision-record-dossier.md\"",
+              },
+            },
+          );
+        }
+
         if (url.endsWith("/api/projects")) {
           return new Response(JSON.stringify([mockProject]), {
             status: 200,
@@ -480,7 +551,7 @@ describe("Crux Studio Ask workflow", () => {
                 {
                   id: "mock",
                   status: "active",
-                  capabilities: ["ask", "inspect", "sources", "review", "compare", "agents", "lifecycle", "evidence-tasks"],
+                  capabilities: ["ask", "inspect", "sources", "review", "compare", "agents", "lifecycle", "evidence-tasks", "lineage", "dossier"],
                 },
               ],
             }),
@@ -673,6 +744,14 @@ describe("Crux Studio Ask workflow", () => {
     expect(screen.getByRole("tab", { name: "Brief" })).toBeInTheDocument();
     expect(screen.getByText("Answer first")).toBeInTheDocument();
     expect(screen.getAllByText(/Use a staged approach/).length).toBeGreaterThan(0);
+    expect(await screen.findByRole("heading", { name: "Decision record" })).toBeInTheDocument();
+    expect(screen.getByText("Decision Record Dossier")).toBeInTheDocument();
+    expect(screen.getByText("Final recommendation")).toBeInTheDocument();
+    expect(screen.getByText(/Approved claims: claim-1/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Export dossier" })).toHaveAttribute(
+      "href",
+      "/api/projects/project-bakery/export/decision-record-dossier",
+    );
     expect(await screen.findByRole("heading", { name: "Decision lineage" })).toBeInTheDocument();
     expect(screen.getByText("Decision delta ready")).toBeInTheDocument();
     expect(screen.getAllByText("Review claims and export the decision package.").length).toBeGreaterThan(0);

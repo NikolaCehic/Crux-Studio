@@ -33,6 +33,14 @@ async function postText(url, body) {
   return response.text();
 }
 
+async function getText(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`${url} returned ${response.status}`);
+  }
+  return response.text();
+}
+
 async function waitForJob(jobId) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const job = await getJson(`${serverUrl}/api/runs/jobs/${jobId}`);
@@ -202,6 +210,48 @@ async function main() {
   if (lineage.summary?.latestRunId !== evidenceClosureRun.runId) {
     throw new Error(`Decision lineage latest run mismatch: ${lineage.summary?.latestRunId}`);
   }
+  const dossierReview = await postJson(`${serverUrl}/api/runs/${evidenceClosureRun.runId}/review/claims`, {
+    claimId: "claim-1",
+    status: "approved",
+    reviewer: "Local smoke",
+    rationale: "Approved to validate the decision record dossier export.",
+  });
+  const dossier = await getJson(`${serverUrl}/api/projects/${project.id}/decision-record`);
+  if (dossier.title !== "Decision Record Dossier") {
+    throw new Error(`Decision record returned an unexpected title: ${dossier.title}`);
+  }
+  if (dossier.latestRunId !== evidenceClosureRun.runId) {
+    throw new Error(`Decision record latest run mismatch: ${dossier.latestRunId}`);
+  }
+  if (!dossier.recommendation || !dossier.nextStep) {
+    throw new Error("Decision record did not include a readable recommendation and next step.");
+  }
+  if (dossier.sourceSummary?.sourceCount < 1) {
+    throw new Error(`Decision record lost source coverage: ${JSON.stringify(dossier.sourceSummary)}`);
+  }
+  if (!dossier.review?.approvedClaims?.includes("claim-1")) {
+    throw new Error(`Decision record did not preserve human review: ${JSON.stringify(dossier.review)}`);
+  }
+  if (dossier.lineage?.deltaCount < 1 || dossier.lineage?.latestDelta?.direction !== "improved") {
+    throw new Error(`Decision record did not preserve improved lineage delta: ${JSON.stringify(dossier.lineage)}`);
+  }
+  if (!dossier.keyArtifacts?.memo) {
+    throw new Error(`Decision record did not include key artifacts: ${JSON.stringify(dossier.keyArtifacts)}`);
+  }
+  const dossierPackage = await getText(`${serverUrl}/api/projects/${project.id}/export/decision-record-dossier`);
+  for (const expectedText of [
+    "# Crux Decision Record Dossier",
+    "## Final Recommendation",
+    "## Human Review",
+    "Approved claims: claim-1",
+    "## Decision Lineage",
+    "Decision delta ready",
+    "## Final Memo",
+  ]) {
+    if (!dossierPackage.includes(expectedText)) {
+      throw new Error(`Decision record dossier package is missing expected text: ${expectedText}`);
+    }
+  }
 
   console.log(JSON.stringify({
     ok: health.ok === true,
@@ -243,6 +293,10 @@ async function main() {
       lineageEventCount: lineage.events.length,
       lineageDeltaCount: lineage.summary.deltaCount,
       lineageNextStep: lineage.summary.nextStep,
+      dossierReviewApprovedClaims: dossierReview.summary.approvedClaims.length,
+      dossierLatestRunId: dossier.latestRunId,
+      dossierSourceCount: dossier.sourceSummary.sourceCount,
+      dossierPackageBytes: dossierPackage.length,
     },
   }, null, 2));
 }
