@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 - 2026-05-02
+
+- Added `docs/PRODUCTIZATION_PLAN.md` with a Harness plus Studio productization roadmap.
+- Added bounded-agent fields to the Studio provider contract.
+- Mapped Harness `agent_manifest.json` and `agent_findings.json` into the local Studio provider.
+- Added server support for `agent-manifest` and `agents` artifacts.
+- Added agent capability reporting to the provider registry.
+- Added an Agents tab and bounded-agent synthesis panel to the Studio UI.
+- Updated mock provider, local provider, server, and web tests for the new agent-aware product surface.
+
 ## 0.2.3 - 2026-05-01
 
 - Rewrote the README into a human-readable product introduction for sharing Crux Studio with others.

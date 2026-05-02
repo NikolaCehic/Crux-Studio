@@ -46,7 +46,14 @@ describe("Studio run API", () => {
     expect(fetched.json()).toEqual(
       expect.objectContaining({
         runId: run.runId,
+        agents: expect.objectContaining({
+          status: "warn",
+          agentCount: 6,
+        }),
         artifacts: expect.objectContaining({
+          agents: expect.objectContaining({
+            synthesis: expect.objectContaining({ status: "warn" }),
+          }),
           claims: expect.any(Object),
           trace: expect.any(Array),
         }),
@@ -80,6 +87,19 @@ describe("Studio run API", () => {
       expect.objectContaining({
         claims: expect.arrayContaining([
           expect.objectContaining({ id: "claim-1" }),
+        ]),
+      }),
+    );
+
+    const agents = await app.inject({
+      method: "GET",
+      url: `/api/runs/${run.runId}/artifacts/agents`,
+    });
+    expect(agents.statusCode).toBe(200);
+    expect(agents.json()).toEqual(
+      expect.objectContaining({
+        findings: expect.arrayContaining([
+          expect.objectContaining({ agent_id: "council_moderator" }),
         ]),
       }),
     );

@@ -1,5 +1,51 @@
 # Trace Log
 
+## 2026-05-02T18:16:00+02:00 - Productization Plan And Agent-Aware Studio Integration
+
+Intent:
+
+- Convert the Harness plus Studio productization direction into a concrete phased plan.
+- Start implementation with the highest-leverage bridge: expose the new Crux Harness bounded agents in Studio.
+- Preserve TDD, provider boundary discipline, and traceability.
+
+Context checked:
+
+- Loaded Impeccable product and design context from `PRODUCT.md` and `DESIGN.md`.
+- Reviewed current Studio docs, provider types, local Harness provider, server API, web app, and tests.
+- Confirmed Crux Harness now emits `agent_manifest.json` and `agent_findings.json`.
+
+TDD state:
+
+- Updated provider, server, local provider, and web tests to require agent-aware contract behavior.
+- Ran focused tests while implementing and fixed the UI query collision caused by agent next actions and diagnostics sharing similar copy.
+
+Implemented:
+
+- Added `docs/PRODUCTIZATION_PLAN.md` with the phased Harness plus Studio roadmap.
+- Added `AgentSummary` and agent artifact fields to the shared provider contract.
+- Updated `MockCruxProvider` to emit bounded-agent summaries and findings.
+- Updated `LocalCruxHarnessProvider` to map Harness `agent_manifest` and `agent_findings` into Studio bundles.
+- Added server artifact support for `agent-manifest` and `agents`.
+- Added `agents` to provider capability reporting.
+- Added an Agents tab to the web artifact inspector.
+- Added a right-rail Bounded agents synthesis panel.
+- Added raw Agents JSON link in the artifact panel.
+- Updated README, changelog, and package versions for the v0.3 productization start.
+
+Verification:
+
+- `pnpm --filter @crux-studio/crux-provider test` passed.
+- `pnpm --filter @crux-studio/server test` passed.
+- `pnpm --filter @crux-studio/web test -- --runInBand` passed.
+- `pnpm check` passed.
+- `pnpm test` passed.
+- `pnpm build` passed.
+- Local Harness provider smoke passed against `/Users/nikolacehic/Desktop/crux-harness`, returning an agent-aware run with 6 bounded agents and `research_scout` as the first finding.
+
+Result:
+
+- Studio now treats bounded agents as a first-class trust surface instead of leaving them buried in raw Harness artifacts.
+
 ## 2026-05-01T11:58:00+02:00 - Human-Readable README Rewrite
 
 Intent:

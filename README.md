@@ -63,7 +63,7 @@ Ask a question
 -> Add context and source material
 -> Run Crux
 -> Read the decision memo
--> Inspect claims, evidence, uncertainty, diagnostics, council output, and trace
+-> Inspect claims, evidence, uncertainty, bounded agents, diagnostics, council output, and trace
 -> Review claims and annotate evidence
 -> Replay with better inputs
 -> Compare runs
@@ -105,12 +105,12 @@ Studio supports replaying a run with the same question and context, comparing th
 - Attach source packs to runs.
 - Preserve source content through the provider boundary.
 - Reopen the latest run automatically when returning to the workspace.
-- Inspect the memo, claims, evidence, contradictions, uncertainty, council output, diagnostics, and trace.
+- Inspect the memo, claims, evidence, contradictions, uncertainty, bounded agents, council output, diagnostics, and trace.
 - Review claims with approve and reject actions.
 - Annotate evidence.
 - Replay runs with the same context.
 - Compare recent runs and see what changed.
-- Open raw Claims, Evidence, and Trace JSON.
+- Open raw Claims, Evidence, Agents, and Trace JSON.
 - Export the memo as Markdown.
 - Export a reviewed memo that includes human review state.
 
@@ -236,6 +236,7 @@ It is intentionally not a hosted team control plane yet. Authentication, teams, 
 - [UX spec](docs/UX_SPEC.md)
 - [Architecture spec](docs/ARCHITECTURE_SPEC.md)
 - [Phased plan](docs/PHASED_PLAN.md)
+- [Productization plan](docs/PRODUCTIZATION_PLAN.md)
 - [Trace log](docs/TRACE_LOG.md)
 - [Changelog](CHANGELOG.md)
 - [Product context](PRODUCT.md)

@@ -17,6 +17,15 @@ const mockRun = {
     confidence: 0.68,
     blockingIssues: ["Offline mock run has no source inventory yet."],
   },
+  agents: {
+    status: "warn",
+    confidence: 0.76,
+    agentCount: 6,
+    warningCount: 2,
+    failingCount: 0,
+    blockingIssues: ["Research Scout: No source material is attached to the run."],
+    nextActions: ["Attach source material and rerun before relying on the memo."],
+  },
   paths: {
     generatedInput: "runs/query-inputs/mock-ask.yaml",
     queryIntake: "runs/mock-ask/query_intake.json",
@@ -72,6 +81,65 @@ const mockBundle = {
     diagnostics: {
       blockingIssues: ["Offline mock run has no source inventory yet."],
       nextFixes: ["Attach source material and rerun."],
+    },
+    agentManifest: {
+      mode: "bounded",
+      agents: [
+        { agent_id: "research_scout", name: "Research Scout", role: "Source gap planner" },
+        { agent_id: "evidence_auditor", name: "Evidence Auditor", role: "Claim support auditor" },
+        { agent_id: "council_moderator", name: "Council Moderator", role: "Cross-agent synthesis judge" },
+      ],
+    },
+    agents: {
+      schema_version: "crux.agent_findings.v1",
+      mode: "bounded",
+      synthesis: {
+        status: "warn",
+        confidence: 0.76,
+        blocking_issues: ["Research Scout: No source material is attached to the run."],
+        next_actions: ["Attach source material and rerun before relying on the memo."],
+      },
+      findings: [
+        {
+          agent_id: "research_scout",
+          name: "Research Scout",
+          role: "Source gap planner",
+          status: "warn",
+          confidence: 0.58,
+          stage: "ingest_sources",
+          summary: "Run has no ingested sources.",
+          blocking_issues: ["No source material is attached to the run."],
+          recommendations: ["Collect source material for the top evidence gap."],
+          next_actions: ["Attach source material and rerun before relying on the memo."],
+          input_artifacts: ["source_inventory.json"],
+        },
+        {
+          agent_id: "evidence_auditor",
+          name: "Evidence Auditor",
+          role: "Claim support auditor",
+          status: "pass",
+          confidence: 0.95,
+          stage: "gather_evidence",
+          summary: "Important claims are mapped to evidence IDs.",
+          blocking_issues: [],
+          recommendations: ["Keep evidence source-backed."],
+          next_actions: [],
+          input_artifacts: ["claims.json", "evidence.json"],
+        },
+        {
+          agent_id: "council_moderator",
+          name: "Council Moderator",
+          role: "Cross-agent synthesis judge",
+          status: "warn",
+          confidence: 0.82,
+          stage: "run_agents",
+          summary: "One source warning remains.",
+          blocking_issues: ["Research Scout: No source material is attached to the run."],
+          recommendations: ["Attach source material and rerun before relying on the memo."],
+          next_actions: ["Attach source material and rerun before relying on the memo."],
+          input_artifacts: ["agent_findings.json"],
+        },
+      ],
     },
     trace: [
       {
@@ -172,7 +240,7 @@ describe("Crux Studio Ask workflow", () => {
                 {
                   id: "mock",
                   status: "active",
-                  capabilities: ["ask", "inspect", "sources", "review", "compare"],
+                  capabilities: ["ask", "inspect", "sources", "review", "compare", "agents"],
                 },
               ],
             }),
@@ -297,7 +365,12 @@ describe("Crux Studio Ask workflow", () => {
     expect(screen.getByText(/first-response gains/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Diagnostics" }));
-    expect(screen.getByText(/Attach source material/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Attach source material/).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Agents" }));
+    expect(screen.getByText("Research Scout")).toBeInTheDocument();
+    expect(screen.getByText("Evidence Auditor")).toBeInTheDocument();
+    expect(screen.getByText(/No source material is attached/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Trace" }));
     expect(screen.getByText("mock-provider.ask")).toBeInTheDocument();
@@ -312,6 +385,8 @@ describe("Crux Studio Ask workflow", () => {
     render(<App />);
 
     expect(await screen.findByText("Provider: mock")).toBeInTheDocument();
+    expect(screen.getByText("Bounded agents")).toBeInTheDocument();
+    expect(screen.getByText("6 agents")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Project" })).toHaveDisplayValue(
       "Bakery Operations",
     );

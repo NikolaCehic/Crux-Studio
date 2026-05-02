@@ -1,4 +1,5 @@
 import type {
+  AgentSummary,
   AskInput,
   CruxProvider,
   RunBundle,
@@ -36,6 +37,19 @@ type HarnessArtifactBundle = {
   evidence?: unknown;
   contradictions?: unknown;
   uncertainty?: unknown;
+  agent_manifest?: unknown;
+  agent_findings?: {
+    synthesis?: {
+      status?: string;
+      confidence?: number;
+      blocking_issues?: string[];
+      next_actions?: string[];
+    };
+    findings?: Array<{
+      status?: string;
+      blocking_issues?: string[];
+    }>;
+  };
   source_inventory?: unknown;
   source_chunks?: unknown;
   trace?: unknown[];
@@ -149,6 +163,7 @@ export class LocalCruxHarnessProvider implements CruxProvider {
       {};
     const synthesis = harnessBundle.eval_report?.council?.synthesis;
     const status = toTrustStatus(synthesis?.status);
+    const agentSummary = summarizeAgents(harnessBundle.agent_findings);
     const question =
       harnessBundle.question_spec?.question ??
       harnessBundle.run_config?.input?.question ??
@@ -169,6 +184,7 @@ export class LocalCruxHarnessProvider implements CruxProvider {
         confidence: Number(synthesis?.confidence ?? 0),
         blockingIssues: synthesis?.blocking_failures ?? [],
       },
+      agents: agentSummary,
       paths: {
         generatedInput: extras.generatedInputPath
           ? path.relative(this.projectRoot, extras.generatedInputPath)
@@ -189,6 +205,8 @@ export class LocalCruxHarnessProvider implements CruxProvider {
         evidence: harnessBundle.evidence,
         contradictions: harnessBundle.contradictions,
         uncertainty: harnessBundle.uncertainty,
+        agentManifest: harnessBundle.agent_manifest,
+        agents: harnessBundle.agent_findings,
         council: harnessBundle.eval_report?.council,
         diagnostics: harnessBundle.eval_report?.diagnostics,
         trace: harnessBundle.trace,
@@ -238,6 +256,23 @@ function toTrustStatus(value: string | undefined): TrustStatus {
   }
 
   return "warn";
+}
+
+function summarizeAgents(agentFindings: HarnessArtifactBundle["agent_findings"]): AgentSummary | undefined {
+  if (!agentFindings?.synthesis) {
+    return undefined;
+  }
+
+  const findings = agentFindings.findings ?? [];
+  return {
+    status: toTrustStatus(agentFindings.synthesis.status),
+    confidence: Number(agentFindings.synthesis.confidence ?? 0),
+    agentCount: findings.length,
+    warningCount: findings.filter((finding) => finding.status === "warn").length,
+    failingCount: findings.filter((finding) => finding.status === "fail").length,
+    blockingIssues: agentFindings.synthesis.blocking_issues ?? [],
+    nextActions: agentFindings.synthesis.next_actions ?? [],
+  };
 }
 
 function formatSourcePackContext(sourcePack: AskInput["sourcePack"]) {

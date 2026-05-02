@@ -85,6 +85,7 @@ type ArtifactTab =
   | "Evidence"
   | "Contradictions"
   | "Uncertainty"
+  | "Agents"
   | "Council"
   | "Diagnostics"
   | "Trace";
@@ -95,6 +96,7 @@ const artifactTabs: ArtifactTab[] = [
   "Evidence",
   "Contradictions",
   "Uncertainty",
+  "Agents",
   "Council",
   "Diagnostics",
   "Trace",
@@ -374,7 +376,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.2 · workspace
+              v0.3 · workspace
             </p>
           </div>
         </div>
@@ -621,6 +623,10 @@ export function App() {
           )}
         </InspectorCard>
 
+        <InspectorCard label="Bounded agents">
+          <AgentSummaryCard agents={selectedRun?.agents} />
+        </InspectorCard>
+
         <InspectorCard id="artifacts" label="Artifacts">
           <FactList
             mono
@@ -642,6 +648,12 @@ export function App() {
                 <a href={`/api/runs/${selectedRun.runId}/artifacts/evidence`}>
                   <FileJson className="size-3.5" />
                   Evidence JSON
+                </a>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <a href={`/api/runs/${selectedRun.runId}/artifacts/agents`}>
+                  <FileJson className="size-3.5" />
+                  Agents JSON
                 </a>
               </Button>
               <Button asChild size="sm" variant="outline">
@@ -996,9 +1008,125 @@ function renderArtifactTab(
       return <JsonArtifact value={bundle.artifacts.contradictions} />;
     case "Uncertainty":
       return <JsonArtifact value={bundle.artifacts.uncertainty} />;
+    case "Agents":
+      return renderAgents(bundle.artifacts.agents);
     case "Council":
       return <JsonArtifact value={bundle.artifacts.council} />;
   }
+}
+
+function AgentSummaryCard({ agents }: { agents: RunSummary["agents"] | undefined }) {
+  if (!agents) {
+    return <p className="text-sm text-muted-foreground">No bounded agent findings available.</p>;
+  }
+
+  return (
+    <div className="grid gap-3 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-medium">{agents.agentCount} agents</span>
+        <TrustBadge status={agents.status} />
+      </div>
+      <FactList
+        items={[
+          { label: "Confidence", value: formatConfidence(agents.confidence) },
+          { label: "Warnings", value: String(agents.warningCount) },
+          { label: "Failures", value: String(agents.failingCount) },
+        ]}
+      />
+      {agents.nextActions.length ? (
+        <div className="grid gap-1.5">
+          <p className="font-medium text-muted-foreground">Next action</p>
+          <p>{agents.nextActions[0]}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function renderAgents(value: unknown) {
+  const record = asRecord(value);
+  const synthesis = asRecord(record.synthesis);
+  const findings = arrayField(record, "findings");
+  const nextActions = stringArrayField(synthesis, "next_actions");
+  const blockingIssues = stringArrayField(synthesis, "blocking_issues");
+
+  if (!findings.length) {
+    return <JsonArtifact value={value} />;
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div className="rounded-lg border bg-muted/25 p-4 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-semibold">Agent synthesis</h3>
+          <TrustBadge status={stringField(synthesis, "status") ?? "pending"} />
+        </div>
+        {blockingIssues.length ? (
+          <ul className="mt-3 grid gap-2">
+            {blockingIssues.map((issue) => (
+              <li
+                className="rounded-md border border-amber-300 bg-amber-100 px-3 py-2 text-amber-950"
+                key={issue}
+              >
+                {issue}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 text-muted-foreground">No agent-level blockers reported.</p>
+        )}
+        {nextActions.length ? (
+          <div className="mt-3 grid gap-1">
+            <p className="font-medium">Next actions</p>
+            <ul className="list-inside list-disc">
+              {nextActions.map((action) => (
+                <li key={action}>{action}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+
+      <ItemGroup>
+        {findings.map((finding, index) => {
+          const item = asRecord(finding);
+          const id = stringField(item, "agent_id") ?? `agent-${index + 1}`;
+          const name = stringField(item, "name") ?? id;
+          const role = stringField(item, "role") ?? "Bounded reviewer";
+          const summary = stringField(item, "summary") ?? "No summary provided.";
+          const status = stringField(item, "status") ?? "pending";
+          const confidence = numberField(item, "confidence");
+          const agentNextActions = stringArrayField(item, "next_actions");
+
+          return (
+            <Item
+              className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 2xl:grid-cols-[auto_minmax(0,1fr)_auto]"
+              key={id}
+              variant="outline"
+            >
+              <ItemMediaIcon icon={ShieldCheck} />
+              <ItemContent>
+                <ItemTitle className="line-clamp-none">{name}</ItemTitle>
+                <ItemDescription>{role}</ItemDescription>
+                <p className="mt-2 text-sm">{summary}</p>
+                {agentNextActions.length ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Next: {agentNextActions[0]}
+                  </p>
+                ) : null}
+              </ItemContent>
+              <ItemActions className="col-span-2 flex flex-wrap gap-2 2xl:col-span-1 2xl:justify-end">
+                <TrustBadge status={status} />
+                {confidence === undefined ? null : (
+                  <Badge variant="secondary">{formatConfidence(confidence)}</Badge>
+                )}
+              </ItemActions>
+            </Item>
+          );
+        })}
+      </ItemGroup>
+    </div>
+  );
 }
 
 function renderClaims(

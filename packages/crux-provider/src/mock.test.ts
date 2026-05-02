@@ -23,12 +23,28 @@ describe("MockCruxProvider contract", () => {
     expect(run.trust.blockingIssues).toContain(
       "Offline mock run has no source inventory yet.",
     );
+    expect(run.agents).toEqual(
+      expect.objectContaining({
+        status: "warn",
+        agentCount: 6,
+        warningCount: 2,
+      }),
+    );
     expect(run.paths.decisionMemo).toContain(`${run.runId}/decision_memo.md`);
     expect(run.memoPreview).toContain("Recommendation");
 
     await expect(provider.listRuns()).resolves.toHaveLength(1);
 
     const bundle = await provider.getRun(run.runId);
+    expect(bundle.artifacts.agents).toEqual(
+      expect.objectContaining({
+        synthesis: expect.objectContaining({ status: "warn" }),
+        findings: expect.arrayContaining([
+          expect.objectContaining({ agent_id: "research_scout" }),
+          expect.objectContaining({ agent_id: "council_moderator" }),
+        ]),
+      }),
+    );
     expect(bundle.artifacts.claims).toEqual(
       expect.objectContaining({
         claims: expect.arrayContaining([

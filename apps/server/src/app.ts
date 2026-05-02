@@ -60,6 +60,8 @@ const artifactNames = [
   "evidence",
   "contradictions",
   "uncertainty",
+  "agent-manifest",
+  "agents",
   "council",
   "diagnostics",
   "trace",
@@ -93,6 +95,7 @@ export function buildServer({
           "review",
           "replay",
           "compare",
+          "agents",
           "export",
         ],
       },
@@ -439,6 +442,10 @@ function selectArtifact(
       return bundle.artifacts.contradictions;
     case "uncertainty":
       return bundle.artifacts.uncertainty;
+    case "agent-manifest":
+      return bundle.artifacts.agentManifest;
+    case "agents":
+      return bundle.artifacts.agents;
     case "council":
       return bundle.artifacts.council;
     case "diagnostics":

@@ -38,6 +38,16 @@ export type TrustGate = {
   blockingIssues: string[];
 };
 
+export type AgentSummary = {
+  status: TrustStatus;
+  confidence: number;
+  agentCount: number;
+  warningCount: number;
+  failingCount: number;
+  blockingIssues: string[];
+  nextActions: string[];
+};
+
 export type RunSummary = {
   runId: string;
   runDir: string;
@@ -50,6 +60,7 @@ export type RunSummary = {
   risk: string;
   createdAt: string;
   trust: TrustGate;
+  agents?: AgentSummary;
   paths: RunPaths;
   memoPreview: string;
 };
@@ -90,6 +101,8 @@ export type RunBundle = RunSummary & {
     evidence?: unknown;
     contradictions?: unknown;
     uncertainty?: unknown;
+    agentManifest?: unknown;
+    agents?: unknown;
     council?: unknown;
     diagnostics?: unknown;
     trace?: unknown[];

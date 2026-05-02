@@ -46,6 +46,54 @@ describe("LocalCruxHarnessProvider", () => {
             evidence: { evidence: [] },
             contradictions: { contradictions: [] },
             uncertainty: { confidence: 0.55 },
+            agent_manifest: {
+              mode: "bounded",
+              agents: [
+                {
+                  agent_id: "evidence_auditor",
+                  name: "Evidence Auditor",
+                  role: "Claim support auditor",
+                },
+              ],
+            },
+            agent_findings: {
+              schema_version: "crux.agent_findings.v1",
+              mode: "bounded",
+              synthesis: {
+                status: "warn",
+                confidence: 0.82,
+                blocking_issues: ["Research Scout: source coverage is thin."],
+                next_actions: ["Attach one more source pack and rerun."],
+              },
+              findings: [
+                {
+                  agent_id: "evidence_auditor",
+                  name: "Evidence Auditor",
+                  role: "Claim support auditor",
+                  status: "pass",
+                  confidence: 0.95,
+                  stage: "gather_evidence",
+                  summary: "Claims are traceable.",
+                  blocking_issues: [],
+                  recommendations: ["Keep evidence source-backed."],
+                  next_actions: [],
+                  input_artifacts: ["claims.json", "evidence.json"],
+                },
+                {
+                  agent_id: "council_moderator",
+                  name: "Council Moderator",
+                  role: "Cross-agent synthesis judge",
+                  status: "warn",
+                  confidence: 0.82,
+                  stage: "run_agents",
+                  summary: "One source warning remains.",
+                  blocking_issues: ["Research Scout: source coverage is thin."],
+                  recommendations: ["Attach one more source pack and rerun."],
+                  next_actions: ["Attach one more source pack and rerun."],
+                  input_artifacts: ["agent_findings.json"],
+                },
+              ],
+            },
             trace: [],
             relationships: {},
           };
@@ -98,6 +146,15 @@ describe("LocalCruxHarnessProvider", () => {
           decisionMemo: "runs/20260501T100000Z-support/decision_memo.md",
           htmlReport: "runs/20260501T100000Z-support/run_report.html",
         }),
+        agents: {
+          status: "warn",
+          confidence: 0.82,
+          agentCount: 2,
+          warningCount: 1,
+          failingCount: 0,
+          blockingIssues: ["Research Scout: source coverage is thin."],
+          nextActions: ["Attach one more source pack and rerun."],
+        },
       }),
     );
 
@@ -105,6 +162,10 @@ describe("LocalCruxHarnessProvider", () => {
       expect.objectContaining({
         runId: run.runId,
         artifacts: expect.objectContaining({
+          agentManifest: expect.objectContaining({ mode: "bounded" }),
+          agents: expect.objectContaining({
+            synthesis: expect.objectContaining({ status: "warn" }),
+          }),
           claims: { claims: [] },
           evidence: { evidence: [] },
           trace: [],

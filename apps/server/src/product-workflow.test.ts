@@ -163,5 +163,6 @@ describe("Studio product workflow API", () => {
         }),
       ]),
     );
+    expect(providers.json().providers[0].capabilities).toContain("agents");
   });
 });

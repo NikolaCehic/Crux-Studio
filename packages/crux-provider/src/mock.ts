@@ -1,4 +1,4 @@
-import type { AskInput, CruxProvider, RunBundle, RunSummary, SourcePolicy } from "./types";
+import type { AgentSummary, AskInput, CruxProvider, RunBundle, RunSummary, SourcePolicy } from "./types";
 
 type MockCruxProviderOptions = {
   now?: () => string;
@@ -35,6 +35,20 @@ export class MockCruxProvider implements CruxProvider {
     const runDir = `runs/${runId}`;
     const blockingIssues = hasSourcePack ? [] : this.blockingIssuesFor(sourcePolicy);
     const topic = firstTopicPhrase(question);
+    const agentStatus: AgentSummary["status"] = blockingIssues.length > 0 ? "warn" : "pass";
+    const agentBlockingIssues = hasSourcePack ? [] : ["Research Scout: No source material is attached to the run."];
+    const agentNextActions = hasSourcePack
+      ? ["Continue with human review before exporting the memo."]
+      : ["Attach source material and rerun before relying on the memo."];
+    const agentSummary: AgentSummary = {
+      status: agentStatus,
+      confidence: hasSourcePack ? 0.88 : 0.72,
+      agentCount: 6,
+      warningCount: hasSourcePack ? 0 : 2,
+      failingCount: 0,
+      blockingIssues: agentBlockingIssues,
+      nextActions: agentNextActions,
+    };
 
     const summary: RunSummary = {
       runId,
@@ -50,6 +64,7 @@ export class MockCruxProvider implements CruxProvider {
         confidence: blockingIssues.length > 0 ? 0.68 : 0.86,
         blockingIssues,
       },
+      agents: agentSummary,
       paths: {
         generatedInput: `runs/query-inputs/${runId}.yaml`,
         queryIntake: `${runDir}/query_intake.json`,
@@ -127,6 +142,74 @@ export class MockCruxProvider implements CruxProvider {
           keyUncertainties: [
             "Whether the user's operating constraints are complete.",
             "Whether source evidence would change the recommended next test.",
+          ],
+        },
+        agentManifest: {
+          mode: "bounded",
+          agents: [
+            { agent_id: "research_scout", name: "Research Scout", role: "Source gap planner" },
+            { agent_id: "evidence_auditor", name: "Evidence Auditor", role: "Claim support auditor" },
+            { agent_id: "red_team_agent", name: "Red Team Agent", role: "Recommendation breaker" },
+            { agent_id: "council_moderator", name: "Council Moderator", role: "Cross-agent synthesis judge" },
+            { agent_id: "replay_planner", name: "Replay Planner", role: "Run improvement planner" },
+            { agent_id: "eval_scenario_agent", name: "Eval Scenario Agent", role: "E2E test designer" },
+          ],
+        },
+        agents: {
+          schema_version: "crux.agent_findings.v1",
+          mode: "bounded",
+          synthesis: {
+            status: agentSummary.status,
+            confidence: agentSummary.confidence,
+            blocking_issues: agentBlockingIssues,
+            next_actions: agentNextActions,
+          },
+          findings: [
+            {
+              agent_id: "research_scout",
+              name: "Research Scout",
+              role: "Source gap planner",
+              status: hasSourcePack ? "pass" : "warn",
+              confidence: hasSourcePack ? 0.84 : 0.58,
+              stage: "ingest_sources",
+              summary: hasSourcePack
+                ? "Source pack context is attached to the run."
+                : "Run has no ingested source pack, so the recommendation remains a draft.",
+              blocking_issues: agentBlockingIssues,
+              recommendations: agentNextActions,
+              next_actions: agentNextActions,
+              input_artifacts: ["source_inventory.json", "source_chunks.json", "contradictions.json"],
+            },
+            {
+              agent_id: "evidence_auditor",
+              name: "Evidence Auditor",
+              role: "Claim support auditor",
+              status: hasSourcePack ? "pass" : "warn",
+              confidence: hasSourcePack ? 0.88 : 0.68,
+              stage: "gather_evidence",
+              summary: hasSourcePack
+                ? "Evidence is source-pack backed in the Studio mock run."
+                : "Evidence is inspectable but source quality is intentionally limited.",
+              blocking_issues: [],
+              recommendations: ["Keep important claims linked to source-backed evidence."],
+              next_actions: [],
+              input_artifacts: ["claims.json", "evidence.json"],
+            },
+            {
+              agent_id: "council_moderator",
+              name: "Council Moderator",
+              role: "Cross-agent synthesis judge",
+              status: agentStatus,
+              confidence: hasSourcePack ? 0.9 : 0.76,
+              stage: "run_agents",
+              summary: hasSourcePack
+                ? "No agent-level blockers were found in the mock run."
+                : "The agent council preserved source weakness as a warning.",
+              blocking_issues: agentBlockingIssues,
+              recommendations: agentNextActions,
+              next_actions: agentNextActions,
+              input_artifacts: ["agent_findings.json"],
+            },
           ],
         },
         council: {

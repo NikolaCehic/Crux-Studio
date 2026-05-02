@@ -1,6 +1,7 @@
 export { MockCruxProvider } from "./mock";
 export type {
   AskInput,
+  AgentSummary,
   ClaimArtifact,
   CruxProvider,
   EvidenceArtifact,
@@ -12,4 +13,3 @@ export type {
   TrustGate,
   TrustStatus,
 } from "./types";
-
