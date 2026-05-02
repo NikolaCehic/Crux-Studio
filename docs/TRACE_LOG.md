@@ -1,5 +1,35 @@
 # Trace Log
 
+## 2026-05-02T18:47:00+02:00 - Source-Backed Productization Bridge
+
+Intent:
+
+- Close the largest local-first product gap: Studio source packs must become real Harness source packs, not pasted prompt context.
+- Preserve TDD, traceability, and local-only product boundaries.
+
+Implemented:
+
+- Updated the local Harness provider to materialize Studio source-pack files under `runs/studio-source-packs/<pack>/raw`.
+- Routed the materialized files through Harness `importSources` into `runs/studio-source-packs/<pack>/pack`.
+- Made materialized source-pack paths content-addressed to avoid stale-file and repeat-run collisions.
+- Passed the generated source-pack directory into Harness arbitrary-query runs.
+- Replaced source body injection in provider context with compact source-pack metadata.
+- Expanded `pnpm smoke:local` to create a project, create a source pack, run a source-backed arbitrary question, and assert source inventory/chunk preservation.
+
+Verification:
+
+- Harness query-intake tests pass with source-pack attachment.
+- Studio local-provider and server workflow tests pass.
+- Full Harness `npm test` passed with 76 tests.
+- Studio `pnpm verify` passed: provider tests, server tests, web tests, TypeScript checks, and production build.
+- Follow-up server provider tests and TypeScript checks passed after content-addressed source-pack hardening.
+- Strengthened `pnpm smoke:local` passed against the real local Harness provider.
+- Final smoke result: provider `local`; source-backed run `20260502T165429Z-how-should-a-support-team-reduce-first-response-`; readiness `usable_with_warnings`; 2 sources; 4 source chunks.
+
+Result:
+
+- Source-backed Studio runs now produce real Harness `source_inventory.json` and `source_chunks.json` artifacts for arbitrary questions.
+
 ## 2026-05-02T18:38:00+02:00 - Local-First Productization Completion
 
 Intent:

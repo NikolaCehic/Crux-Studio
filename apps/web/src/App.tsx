@@ -394,7 +394,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.4 · workspace
+              v0.5 · workspace
             </p>
           </div>
         </div>

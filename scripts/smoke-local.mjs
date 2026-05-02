@@ -9,6 +9,18 @@ async function getJson(url) {
   return response.json();
 }
 
+async function postJson(url, body) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`${url} returned ${response.status}`);
+  }
+  return response.json();
+}
+
 async function main() {
   const [health, providers, demos, runs] = await Promise.all([
     getJson(`${serverUrl}/health`),
@@ -25,6 +37,39 @@ async function main() {
 
   const provider = providers.providers?.[0];
   const latestAgentRun = runs.find((run) => run.agents);
+  const stamp = new Date().toISOString().replace(/[-:.]/g, "").slice(0, 15);
+  const project = await postJson(`${serverUrl}/api/projects`, {
+    name: `Local smoke ${stamp}`,
+  });
+  const sourcePack = await postJson(`${serverUrl}/api/source-packs`, {
+    projectId: project.id,
+    name: `Source bridge smoke ${stamp}`,
+    files: [
+      {
+        name: "queue-notes.md",
+        content: "# Queue notes\n\nSupport tier handoffs create preventable first-response delays on Mondays.",
+      },
+      {
+        name: "response-times.csv",
+        content: "week,first_response_minutes\n1,82\n2,71\n3,64\n",
+      },
+    ],
+  });
+  const sourceBackedRun = await postJson(`${serverUrl}/api/runs/ask`, {
+    projectId: project.id,
+    sourcePackId: sourcePack.id,
+    question: "How should a support team reduce first-response time without hiring more agents this month?",
+    context: "Use the attached queue notes and response-time sample as the source pack.",
+    timeHorizon: "30 days",
+    sourcePolicy: "offline",
+  });
+  const sourceBackedBundle = await getJson(`${serverUrl}/api/runs/${sourceBackedRun.runId}`);
+  const sourceCount = sourceBackedBundle.sourceWorkspace?.sourceCount ?? 0;
+  const sourceChunkCount = sourceBackedBundle.sourceWorkspace?.sourceChunkCount ?? 0;
+
+  if (sourceCount < 2 || sourceChunkCount < 2) {
+    throw new Error(`Source-backed run did not preserve source inventory/chunks: ${sourceCount}/${sourceChunkCount}`);
+  }
 
   console.log(JSON.stringify({
     ok: health.ok === true,
@@ -39,6 +84,12 @@ async function main() {
           agents: latestAgentRun.agents?.agentCount,
         }
       : null,
+    sourceBackedRun: {
+      runId: sourceBackedRun.runId,
+      readiness: sourceBackedRun.readiness?.status,
+      sourceCount,
+      sourceChunkCount,
+    },
   }, null, 2));
 }
 

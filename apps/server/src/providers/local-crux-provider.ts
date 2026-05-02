@@ -9,7 +9,8 @@ import type {
   SourcePolicy,
   TrustStatus,
 } from "@crux-studio/crux-provider";
-import { readdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -70,6 +71,15 @@ type HarnessArtifactBundle = {
   relationships?: unknown;
 };
 
+type HarnessSourceImportReport = {
+  input_dir: string;
+  output_dir: string;
+  imported_count: number;
+  skipped_count: number;
+  sources: unknown[];
+  skipped: unknown[];
+};
+
 export type LocalCruxHarnessDriver = {
   runQuery(
     projectRoot: string,
@@ -78,11 +88,23 @@ export type LocalCruxHarnessDriver = {
       context?: string;
       timeHorizon?: string;
       sourcePolicy?: SourcePolicy;
+      sourcePack?: string;
     },
   ): Promise<HarnessRunResult>;
+  importSources(options: {
+    inputDir: string;
+    outputDir: string;
+  }): Promise<HarnessSourceImportReport>;
   loadRunArtifactBundle(projectRoot: string, runDir: string): Promise<HarnessArtifactBundle>;
   writeRunReport(projectRoot: string, runDir: string): Promise<string>;
   listRunDirs(projectRoot: string): Promise<string[]>;
+};
+
+type PreparedSourcePack = {
+  relativePackDir: string;
+  importedCount: number;
+  skippedCount: number;
+  fileNames: string[];
 };
 
 type LocalCruxHarnessProviderOptions = {
@@ -108,12 +130,14 @@ export class LocalCruxHarnessProvider implements CruxProvider {
   }
 
   async ask(input: AskInput): Promise<RunSummary> {
+    const preparedSourcePack = await this.materializeSourcePack(input.sourcePack);
     const result = await this.driver.runQuery(this.projectRoot, input.question, {
-      context: [input.context, formatSourcePackContext(input.sourcePack)]
+      context: [input.context, formatSourcePackContext(input.sourcePack, preparedSourcePack)]
         .filter(Boolean)
         .join("\n\n"),
       timeHorizon: input.timeHorizon,
       sourcePolicy: input.sourcePolicy,
+      sourcePack: preparedSourcePack?.relativePackDir ?? input.sourcePack?.path,
     });
     const reportPath = await this.driver.writeRunReport(this.projectRoot, result.runDir);
     const bundle = await this.loadBundle(result.runDir, {
@@ -123,6 +147,55 @@ export class LocalCruxHarnessProvider implements CruxProvider {
     });
 
     return this.toSummary(bundle);
+  }
+
+  private async materializeSourcePack(
+    sourcePack: AskInput["sourcePack"],
+  ): Promise<PreparedSourcePack | undefined> {
+    if (!sourcePack) {
+      return undefined;
+    }
+
+    const files = sourcePack.files ?? [];
+    if (files.length === 0) {
+      return sourcePack.path
+        ? {
+            relativePackDir: sourcePack.path,
+            importedCount: sourcePack.sourceCount,
+            skippedCount: 0,
+            fileNames: [],
+          }
+        : undefined;
+    }
+
+    const safeFiles = files.map((file, index) => ({
+      name: safeSourceFileName(file.name, index),
+      content: file.content,
+      contentHash: file.contentHash,
+    }));
+    const contentHash = hashSourcePackFiles(safeFiles);
+    const slug = slugifyPathSegment(`${sourcePack.id}-${sourcePack.name}-${contentHash.slice(0, 12)}`);
+    const baseDir = path.join(this.projectRoot, "runs", "studio-source-packs", slug);
+    const rawDir = path.join(baseDir, "raw");
+    const packDir = path.join(baseDir, "pack");
+
+    await mkdir(rawDir, { recursive: true });
+
+    await Promise.all(
+      safeFiles.map((file) => writeFile(path.join(rawDir, file.name), file.content, "utf8")),
+    );
+
+    const report = await this.driver.importSources({ inputDir: rawDir, outputDir: packDir });
+    if (report.imported_count === 0) {
+      throw new Error("Source pack did not contain any supported source files.");
+    }
+
+    return {
+      relativePackDir: path.relative(this.projectRoot, packDir),
+      importedCount: report.imported_count,
+      skippedCount: report.skipped_count,
+      fileNames: safeFiles.map((file) => file.name),
+    };
   }
 
   async listRuns(): Promise<RunSummary[]> {
@@ -252,9 +325,13 @@ async function createDistDriver(projectRoot: string): Promise<LocalCruxHarnessDr
   const reportModule = await importDist<{
     writeRunReport: LocalCruxHarnessDriver["writeRunReport"];
   }>(projectRoot, "run-report.js");
+  const sourceImporterModule = await importDist<{
+    importSources: LocalCruxHarnessDriver["importSources"];
+  }>(projectRoot, "source-importer.js");
 
   return {
     runQuery: queryModule.runQuery,
+    importSources: sourceImporterModule.importSources,
     loadRunArtifactBundle: bundleModule.loadRunArtifactBundle,
     writeRunReport: reportModule.writeRunReport,
     async listRunDirs(root) {
@@ -308,7 +385,7 @@ function summarizeSourceWorkspace(bundle: HarnessArtifactBundle): SourceWorkspac
     sourceCount: bundle.summary?.source_count ?? sources.length,
     sourceChunkCount: bundle.summary?.source_chunk_count ?? chunks.length,
     missingEvidence,
-    ...(bundle.run_config?.source_pack ? { sourcePackName: path.basename(bundle.run_config.source_pack) } : {}),
+    ...(bundle.run_config?.source_pack ? { sourcePackName: sourcePackDisplayName(bundle.run_config.source_pack) } : {}),
   };
 }
 
@@ -350,16 +427,30 @@ function summarizeReadiness(
   };
 }
 
-function formatSourcePackContext(sourcePack: AskInput["sourcePack"]) {
+function formatSourcePackContext(
+  sourcePack: AskInput["sourcePack"],
+  preparedSourcePack?: PreparedSourcePack,
+) {
   if (!sourcePack) {
     return undefined;
   }
 
-  const files = sourcePack.files
-    ?.map((file) => `### ${file.name}\n${file.content.trim().slice(0, 5000)}`)
-    .join("\n\n");
-
-  return [`Studio source pack: ${sourcePack.name}`, files].filter(Boolean).join("\n\n");
+  return [
+    `Studio source pack: ${sourcePack.name}`,
+    preparedSourcePack?.relativePackDir
+      ? `Harness source pack: ${preparedSourcePack.relativePackDir}`
+      : sourcePack.path
+        ? `Harness source pack: ${sourcePack.path}`
+        : undefined,
+    preparedSourcePack
+      ? `Imported sources: ${preparedSourcePack.importedCount}; skipped files: ${preparedSourcePack.skippedCount}.`
+      : undefined,
+    preparedSourcePack?.fileNames.length
+      ? `Files: ${preparedSourcePack.fileNames.join(", ")}`
+      : sourcePack.files?.length
+        ? `Files: ${sourcePack.files.map((file) => file.name).join(", ")}`
+        : undefined,
+  ].filter(Boolean).join("\n");
 }
 
 function stringField(source: Record<string, unknown>, field: string): string | undefined {
@@ -371,6 +462,37 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function safeSourceFileName(fileName: string, index: number): string {
+  const baseName = path.basename(fileName.trim()) || `source-${index + 1}.md`;
+  return baseName.replace(/[^a-zA-Z0-9._ -]/g, "_");
+}
+
+function slugifyPathSegment(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 72) || "source-pack";
+}
+
+function sourcePackDisplayName(sourcePackPath: string): string {
+  const baseName = path.basename(sourcePackPath);
+  return baseName === "pack" ? path.basename(path.dirname(sourcePackPath)) : baseName;
+}
+
+function hashSourcePackFiles(
+  files: Array<{ name: string; content: string; contentHash?: string }>,
+): string {
+  const hash = createHash("sha256");
+  for (const file of files) {
+    hash.update(file.name);
+    hash.update("\0");
+    hash.update(file.contentHash ?? file.content);
+    hash.update("\0");
+  }
+  return hash.digest("hex");
 }
 
 function createdAtFromRunId(runId: string): string {

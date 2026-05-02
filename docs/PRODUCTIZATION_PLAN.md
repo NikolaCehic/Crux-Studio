@@ -222,7 +222,7 @@ The first implementation slice is Phase 2 plus the first part of Phase 3:
 
 ## Local-First Implementation Status
 
-Implemented in Studio v0.4:
+Implemented in Studio v0.4 and v0.5:
 
 - Phase 1: canonical demo questions are exposed through `/api/demos` and the ask panel.
 - Phase 2: the provider boundary carries readiness, Harness version, source summaries, bounded agents, source inventory, source chunks, and eval reports.
@@ -232,6 +232,7 @@ Implemented in Studio v0.4:
 - Phase 6: compare now includes readiness, trust, agent, source, and run identity movement.
 - Phase 7: `pnpm dev:local`, `pnpm smoke:local`, `pnpm verify`, and `docs/DEMO_GUIDE.md` make the product easier to run and share.
 - Phase 8: artifact access remains whitelisted and the local smoke check verifies server health, web response, provider registry, demos, run indexing, and agent-aware run availability.
+- Productization bridge: Studio v0.5 now materializes uploaded source-pack files into local Harness source packs before asking, so arbitrary-question runs produce real `source_inventory.json` and `source_chunks.json` instead of relying on pasted context.
 
 Still deferred:
 

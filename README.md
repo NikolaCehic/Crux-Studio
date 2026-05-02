@@ -103,7 +103,7 @@ Studio supports replaying a run with the same question and context, comparing th
 - Organize work into projects.
 - Create source packs from pasted Markdown, TXT, or CSV-style material.
 - Attach source packs to runs.
-- Preserve source content through the provider boundary.
+- Materialize attached source packs into real local Crux Harness source packs, inventories, and chunks.
 - Reopen the latest run automatically when returning to the workspace.
 - Start from canonical demo questions.
 - Inspect the memo, claims, evidence, sources, contradictions, uncertainty, bounded agents, council output, diagnostics, and trace.
@@ -242,6 +242,8 @@ Smoke check a running local Studio:
 ```bash
 pnpm smoke:local
 ```
+
+The smoke check creates a source-backed local run and verifies that source inventory and source chunks survive the Studio-to-Harness bridge.
 
 The project is developed with a TDD-first workflow. Product behavior is covered across the provider package, server API, and web app.
 

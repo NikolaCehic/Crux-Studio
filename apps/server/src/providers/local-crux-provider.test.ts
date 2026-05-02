@@ -1,19 +1,26 @@
 import { describe, expect, it } from "vitest";
+import { mkdtemp, readFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { LocalCruxHarnessProvider } from "./local-crux-provider";
 
 describe("LocalCruxHarnessProvider", () => {
-  it("maps harness query output and artifact bundle into the Studio provider contract", async () => {
+  it("materializes Studio source files into a Harness source pack and maps the run bundle", async () => {
+    const projectRoot = await mkdtemp(path.join(os.tmpdir(), "crux-studio-local-provider-"));
     let capturedContext = "";
+    let capturedSourcePack: string | undefined;
+    let capturedRawFile = "";
     const provider = new LocalCruxHarnessProvider({
-      projectRoot: "/workspace/crux-harness",
+      projectRoot,
       driver: {
         async runQuery(_projectRoot, question, options) {
           capturedContext = options.context ?? "";
+          capturedSourcePack = options.sourcePack;
           return {
             runId: "20260501T100000Z-support",
-            runDir: "/workspace/crux-harness/runs/20260501T100000Z-support",
+            runDir: `${projectRoot}/runs/20260501T100000Z-support`,
             generatedInputPath:
-              "/workspace/crux-harness/runs/query-inputs/20260501T100000Z-support.yaml",
+              `${projectRoot}/runs/query-inputs/20260501T100000Z-support.yaml`,
             intake: {
               original_query: question,
               analysis_scope: "general-analysis",
@@ -24,12 +31,32 @@ describe("LocalCruxHarnessProvider", () => {
             },
           };
         },
+        async importSources(options) {
+          capturedRawFile = await readFile(path.join(options.inputDir, "queue-notes.md"), "utf8");
+          return {
+            input_dir: options.inputDir,
+            output_dir: options.outputDir,
+            imported_count: 1,
+            skipped_count: 0,
+            sources: [
+              {
+                id: "S1",
+                title: "Support notes",
+                source_type: "internal_document",
+                input_path: path.join(options.inputDir, "queue-notes.md"),
+                output_path: path.join(options.outputDir, "s1-support-notes.md"),
+                content_hash: "hash",
+              },
+            ],
+            skipped: [],
+          };
+        },
         async loadRunArtifactBundle() {
           return {
             run_dir: "runs/20260501T100000Z-support",
             run_config: {
               harness_version: "1.12.1",
-              source_pack: "source-packs/support-notes",
+              source_pack: "runs/studio-source-packs/source-pack-1-support-queue-notes-abcdef123456/pack",
             },
             question_spec: {
               question: "How should support reduce first-response time?",
@@ -138,7 +165,10 @@ describe("LocalCruxHarnessProvider", () => {
 
     expect(capturedContext).toContain("Support queue notes");
     expect(capturedContext).toContain("queue-notes.md");
-    expect(capturedContext).toContain("Preventable queue handoff errors");
+    expect(capturedContext).toContain("Harness source pack:");
+    expect(capturedContext).not.toContain("Preventable queue handoff errors");
+    expect(capturedSourcePack).toMatch(/^runs\/studio-source-packs\/source-pack-1-support-queue-notes-[a-f0-9]{12}\/pack$/);
+    expect(capturedRawFile).toBe("Preventable queue handoff errors appear every Monday.");
 
     expect(run).toEqual(
       expect.objectContaining({
@@ -177,7 +207,7 @@ describe("LocalCruxHarnessProvider", () => {
           sourceCount: 1,
           sourceChunkCount: 1,
           missingEvidence: ["Current queue baseline"],
-          sourcePackName: "support-notes",
+          sourcePackName: "source-pack-1-support-queue-notes-abcdef123456",
         },
       }),
     );

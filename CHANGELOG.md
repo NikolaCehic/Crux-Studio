@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 - 2026-05-02
+
+- Materialized Studio source-pack files into real local Crux Harness source packs before running arbitrary questions.
+- Used content-addressed materialized source-pack paths to avoid stale-file and repeat-run collisions.
+- Passed the generated Harness source-pack path through the local provider so `source_inventory.json` and `source_chunks.json` become first-class run artifacts.
+- Replaced source-file body injection in provider context with a compact source-pack summary to keep prompts cleaner and more auditable.
+- Expanded local smoke verification to create a project, create a source pack, run a source-backed question, and assert preserved source inventory/chunks.
+
 ## 0.4.0 - 2026-05-02
 
 - Implemented the remaining local-first productization plan surfaces across Studio.
