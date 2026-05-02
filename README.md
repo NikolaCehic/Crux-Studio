@@ -112,6 +112,8 @@ Studio supports replaying a run with the same question and context, comparing th
 - Land on an answer-first decision brief for every completed run.
 - Submit new runs through an async lifecycle with queued, running, completed, failed, cancelled, and retry states.
 - Recover lifecycle job history across local server restarts, resume queued jobs, and make interrupted running jobs retryable.
+- Convert missing evidence, blockers, and source-related agent next actions into evidence closure tasks.
+- Resolve evidence tasks with source notes, then automatically create a source pack, rerun, and compare the improved run.
 - Start from canonical demo questions.
 - Inspect the memo, claims, evidence, sources, contradictions, uncertainty, bounded agents, council output, diagnostics, and trace.
 - See run readiness as ready, usable with warnings, or blocked.
@@ -250,7 +252,7 @@ Smoke check a running local Studio:
 pnpm smoke:local
 ```
 
-The smoke check creates a source-backed local lifecycle job and verifies that source inventory, source chunks, and durable lifecycle history survive the Studio-to-Harness bridge.
+The smoke check creates source-backed lifecycle jobs, verifies durable lifecycle history, closes an evidence task with a source note, reruns Crux, and compares the improved run.
 
 The project is developed with a TDD-first workflow. Product behavior is covered across the provider package, server API, and web app.
 
@@ -271,6 +273,7 @@ It is intentionally not a hosted team control plane yet. Authentication, teams, 
 - [Phase 10 answer-first brief spec](docs/PHASE_10_ANSWER_FIRST_DECISION_BRIEF_SPEC.md)
 - [Phase 11 async lifecycle spec](docs/PHASE_11_ASYNC_RUN_LIFECYCLE_SPEC.md)
 - [Phase 12 durable lifecycle recovery spec](docs/PHASE_12_DURABLE_LIFECYCLE_RECOVERY_SPEC.md)
+- [Phase 13 evidence gap closure spec](docs/PHASE_13_EVIDENCE_GAP_CLOSURE_SPEC.md)
 - [Demo guide](docs/DEMO_GUIDE.md)
 - [Trace log](docs/TRACE_LOG.md)
 - [Changelog](CHANGELOG.md)

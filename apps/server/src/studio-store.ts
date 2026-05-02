@@ -50,6 +50,30 @@ export type StudioRunJob = {
   error?: string;
 };
 
+export type StudioEvidenceTaskKind =
+  | "missing_evidence"
+  | "trust_blocker"
+  | "agent_blocker"
+  | "agent_next_action";
+
+export type StudioEvidenceTaskStatus = "open" | "resolved";
+
+export type StudioEvidenceTask = {
+  taskId: string;
+  runId: string;
+  projectId?: string;
+  status: StudioEvidenceTaskStatus;
+  kind: StudioEvidenceTaskKind;
+  title: string;
+  detail: string;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+  resolvedBySourcePackId?: string;
+  rerunJobId?: string;
+  resolutionNote?: string;
+};
+
 export type StudioReviewAction = {
   id: string;
   createdAt: string;
@@ -79,6 +103,7 @@ type StudioState = {
   sourcePacks: StudioSourcePack[];
   runLinks: StudioRunLink[];
   runJobs: StudioRunJob[];
+  evidenceTasks: StudioEvidenceTask[];
   reviews: StudioReview[];
 };
 
@@ -100,6 +125,9 @@ export type StudioStore = {
   saveRunJob(job: StudioRunJob): Promise<StudioRunJob>;
   listRunJobs(): Promise<StudioRunJob[]>;
   getRunJob(jobId: string): Promise<StudioRunJob | undefined>;
+  saveEvidenceTask(task: StudioEvidenceTask): Promise<StudioEvidenceTask>;
+  listEvidenceTasks(runId: string): Promise<StudioEvidenceTask[]>;
+  getEvidenceTask(taskId: string): Promise<StudioEvidenceTask | undefined>;
   createSourcePack(input: CreateSourcePackInput): Promise<StudioSourcePack>;
   listSourcePacks(projectId?: string): Promise<StudioSourcePack[]>;
   getSourcePack(sourcePackId: string): Promise<StudioSourcePack | undefined>;
@@ -128,6 +156,7 @@ const initialState = (): StudioState => ({
   sourcePacks: [],
   runLinks: [],
   runJobs: [],
+  evidenceTasks: [],
   reviews: [],
 });
 
@@ -210,6 +239,22 @@ class MemoryStudioStore implements StudioStore {
 
   async getRunJob(jobId: string): Promise<StudioRunJob | undefined> {
     return this.state.runJobs.find((item) => item.jobId === jobId);
+  }
+
+  async saveEvidenceTask(task: StudioEvidenceTask): Promise<StudioEvidenceTask> {
+    this.state.evidenceTasks = upsertByKey(this.state.evidenceTasks, task, "taskId");
+    await this.persist();
+    return task;
+  }
+
+  async listEvidenceTasks(runId: string): Promise<StudioEvidenceTask[]> {
+    return this.state.evidenceTasks
+      .filter((item) => item.runId === runId)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  }
+
+  async getEvidenceTask(taskId: string): Promise<StudioEvidenceTask | undefined> {
+    return this.state.evidenceTasks.find((item) => item.taskId === taskId);
   }
 
   async createSourcePack(input: CreateSourcePackInput): Promise<StudioSourcePack> {
@@ -393,6 +438,21 @@ class FileStudioStore extends MemoryStudioStore {
     return super.getRunJob(jobId);
   }
 
+  override async saveEvidenceTask(task: StudioEvidenceTask): Promise<StudioEvidenceTask> {
+    await this.load();
+    return super.saveEvidenceTask(task);
+  }
+
+  override async listEvidenceTasks(runId: string): Promise<StudioEvidenceTask[]> {
+    await this.load();
+    return super.listEvidenceTasks(runId);
+  }
+
+  override async getEvidenceTask(taskId: string): Promise<StudioEvidenceTask | undefined> {
+    await this.load();
+    return super.getEvidenceTask(taskId);
+  }
+
   override async createSourcePack(input: CreateSourcePackInput): Promise<StudioSourcePack> {
     await this.load();
     return super.createSourcePack(input);
@@ -475,6 +535,7 @@ function normalizeState(value: unknown): StudioState {
     sourcePacks: Array.isArray(partial.sourcePacks) ? partial.sourcePacks : [],
     runLinks: Array.isArray(partial.runLinks) ? partial.runLinks : [],
     runJobs: Array.isArray(partial.runJobs) ? partial.runJobs : [],
+    evidenceTasks: Array.isArray(partial.evidenceTasks) ? partial.evidenceTasks : [],
     reviews: Array.isArray(partial.reviews) ? partial.reviews : [],
   };
 }

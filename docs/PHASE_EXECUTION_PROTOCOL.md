@@ -18,15 +18,16 @@ Every phase must complete these steps before it is considered done:
 - Phase 10: Answer-First Decision Brief, implemented in Studio v0.7.
 - Phase 11: Async Run Lifecycle, implemented in Studio v0.8.
 - Phase 12: Durable Lifecycle Recovery, implemented in Studio v0.9.
+- Phase 13: Evidence Gap Closure Loop, implemented in Studio v0.10.
 
 ## Next Phase
 
-Phase 13: Evidence Gap Closure Loop.
+Phase 14: Decision Delta Report.
 
 Goal:
 
-- Turn missing evidence, blockers, and agent next actions into explicit source tasks that can be resolved, rerun, and compared.
+- Make before/after run movement readable as a decision delta: what changed, why trust moved, which evidence closed gaps, and what still blocks readiness.
 
 Why this is next:
 
-- Studio can now survive the local run lifecycle. The next product gap is helping users close the evidence gaps that keep a decision at `usable_with_warnings` instead of ready.
+- Studio can now close evidence gaps and rerun. The next product gap is making the improvement legible enough that a user can confidently explain why the newer run is better.

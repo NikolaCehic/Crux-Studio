@@ -24,6 +24,28 @@ export type StudioReview = {
   };
 };
 
+export type StudioEvidenceTask = {
+  taskId: string;
+  runId: string;
+  projectId?: string;
+  status: "open" | "resolved";
+  kind: "missing_evidence" | "trust_blocker" | "agent_blocker" | "agent_next_action";
+  title: string;
+  detail: string;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+  resolvedBySourcePackId?: string;
+  rerunJobId?: string;
+  resolutionNote?: string;
+};
+
+export type EvidenceTaskResolution = {
+  task: StudioEvidenceTask;
+  sourcePack: StudioSourcePack;
+  job: RunJob;
+};
+
 export type RunComparison = {
   leftRunId: string;
   rightRunId: string;
@@ -149,6 +171,27 @@ export async function annotateEvidence(
   },
 ): Promise<StudioReview> {
   return postJson(`/api/runs/${runId}/review/evidence`, input, "Evidence annotation failed.");
+}
+
+export async function listEvidenceTasks(runId: string): Promise<StudioEvidenceTask[]> {
+  return getJson(`/api/runs/${runId}/evidence-tasks`, "Evidence tasks failed to load.");
+}
+
+export async function resolveEvidenceTask(
+  runId: string,
+  taskId: string,
+  input: {
+    sourcePackName?: string;
+    sourceName?: string;
+    sourceContent: string;
+    note?: string;
+  },
+): Promise<EvidenceTaskResolution> {
+  return postJson(
+    `/api/runs/${runId}/evidence-tasks/${taskId}/resolve`,
+    input,
+    "Evidence task resolution failed.",
+  );
 }
 
 export async function replayRun(runId: string): Promise<RunSummary> {

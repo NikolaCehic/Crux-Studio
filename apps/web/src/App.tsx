@@ -67,6 +67,7 @@ import {
   getRunJob,
   getRun,
   listDemos,
+  listEvidenceTasks,
   listProjects,
   listProviders,
   listRunJobs,
@@ -74,12 +75,14 @@ import {
   listSourcePacks,
   replayRun,
   retryRunJob,
+  resolveEvidenceTask,
   reviewClaim,
   startRunJob,
   type ProviderRegistry,
   type DemoQuestion,
   type RunComparison,
   type RunJob,
+  type StudioEvidenceTask,
   type StudioProject,
   type StudioReview,
   type StudioSourcePack,
@@ -135,6 +138,8 @@ const initialForm: AskFormState = {
   sourcePolicy: "offline",
 };
 
+const defaultSourceDraft = "# Source note\n\nPaste Markdown, TXT, or CSV evidence here.";
+
 const policyHelp: Record<SourcePolicy, string> = {
   offline: "Draft with local context only. Treat source-free output as untrusted.",
   hybrid: "Use attached source packs first, then provider context when available.",
@@ -160,13 +165,12 @@ export function App() {
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedSourcePackId, setSelectedSourcePackId] = useState("");
   const [sourcePackName, setSourcePackName] = useState("Wholesale intake notes");
-  const [sourceDraft, setSourceDraft] = useState(
-    "# Source note\n\nPaste Markdown, TXT, or CSV evidence here.",
-  );
+  const [sourceDraft, setSourceDraft] = useState(defaultSourceDraft);
   const [sourceFiles, setSourceFiles] = useState<SourceDraftFile[]>([]);
   const [run, setRun] = useState<RunSummary | null>(null);
   const [bundle, setBundle] = useState<RunBundle | null>(null);
   const [review, setReview] = useState<StudioReview | null>(null);
+  const [evidenceTasks, setEvidenceTasks] = useState<StudioEvidenceTask[]>([]);
   const [comparison, setComparison] = useState<RunComparison | null>(null);
   const [jobs, setJobs] = useState<RunJob[]>([]);
   const [activeJob, setActiveJob] = useState<RunJob | null>(null);
@@ -319,10 +323,14 @@ export function App() {
     setError(null);
 
     try {
-      const nextBundle = await getRun(runId);
+      const [nextBundle, nextEvidenceTasks] = await Promise.all([
+        getRun(runId),
+        listEvidenceTasks(runId).catch(() => []),
+      ]);
       setBundle(nextBundle);
       setRun(nextBundle);
       setReview(reviewFromBundle(nextBundle));
+      setEvidenceTasks(nextEvidenceTasks);
       setRuns((current) => upsertRun(current, nextBundle));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Run bundle failed to load.");
@@ -446,6 +454,35 @@ export function App() {
     }
   }
 
+  async function handleResolveEvidenceTask(taskId: string) {
+    if (!selectedRun) return;
+
+    const sourceContent = sourceDraft.trim();
+    if (!sourceContent || sourceContent === defaultSourceDraft.trim()) {
+      setError("Paste source evidence before resolving an evidence task.");
+      return;
+    }
+
+    try {
+      const task = evidenceTasks.find((item) => item.taskId === taskId);
+      const result = await resolveEvidenceTask(selectedRun.runId, taskId, {
+        sourcePackName: sourcePackName.trim() || `Evidence closure for ${task?.title ?? selectedRun.runId}`,
+        sourceName: `${slugify(task?.title ?? "evidence-gap") || "evidence-gap"}.md`,
+        sourceContent,
+        note: `Resolved from Studio for ${selectedRun.runId}.`,
+      });
+      setEvidenceTasks((current) => upsertEvidenceTask(current, result.task));
+      setSourcePacks((current) => upsertById(current, result.sourcePack));
+      setSelectedProjectId(result.sourcePack.projectId);
+      setSelectedSourcePackId(result.sourcePack.id);
+      await applyRunJob(result.job);
+      setActiveTab("Brief");
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Evidence task resolution failed.");
+    }
+  }
+
   async function handleReplay() {
     if (!selectedRun) return;
 
@@ -506,7 +543,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.9 · workspace
+              v0.10 · workspace
             </p>
           </div>
         </div>
@@ -708,6 +745,7 @@ export function App() {
             activeTab={activeTab}
             bundle={bundle}
             comparison={comparison}
+            evidenceTasks={evidenceTasks}
             isLoadingBundle={isLoadingBundle}
             review={review}
             selectedRun={selectedRun}
@@ -715,6 +753,7 @@ export function App() {
             onChangeTab={setActiveTab}
             onCompareLatest={() => void handleCompareLatest()}
             onReplay={() => void handleReplay()}
+            onResolveEvidenceTask={(taskId) => void handleResolveEvidenceTask(taskId)}
             onReviewClaim={handleReviewClaim}
           />
         </section>
@@ -780,6 +819,14 @@ export function App() {
 
         <InspectorCard label="Sources">
           <SourceWorkspaceCard sourceWorkspace={selectedRun?.sourceWorkspace} />
+        </InspectorCard>
+
+        <InspectorCard label="Evidence gaps">
+          <EvidenceTaskPanel
+            compact
+            tasks={evidenceTasks}
+            onResolveTask={(taskId) => void handleResolveEvidenceTask(taskId)}
+          />
         </InspectorCard>
 
         <InspectorCard id="artifacts" label="Artifacts">
@@ -1214,6 +1261,7 @@ function MemoPanel({
   activeTab,
   bundle,
   comparison,
+  evidenceTasks,
   isLoadingBundle,
   review,
   selectedRun,
@@ -1221,11 +1269,13 @@ function MemoPanel({
   onChangeTab,
   onCompareLatest,
   onReplay,
+  onResolveEvidenceTask,
   onReviewClaim,
 }: {
   activeTab: ArtifactTab;
   bundle: RunBundle | null;
   comparison: RunComparison | null;
+  evidenceTasks: StudioEvidenceTask[];
   isLoadingBundle: boolean;
   review: StudioReview | null;
   selectedRun: RunBundle | RunSummary | null;
@@ -1233,6 +1283,7 @@ function MemoPanel({
   onChangeTab: (tab: ArtifactTab) => void;
   onCompareLatest: () => void;
   onReplay: () => void;
+  onResolveEvidenceTask: (taskId: string) => void;
   onReviewClaim: (claimId: string, status: "approved" | "rejected") => void;
 }) {
   return (
@@ -1278,9 +1329,11 @@ function MemoPanel({
             <ArtifactInspector
               activeTab={activeTab}
               bundle={bundle}
+              evidenceTasks={evidenceTasks}
               isLoading={isLoadingBundle}
               onAnnotateEvidence={onAnnotateEvidence}
               onChangeTab={onChangeTab}
+              onResolveEvidenceTask={onResolveEvidenceTask}
               onReviewClaim={onReviewClaim}
             />
             <ReviewSummary review={review} runId={selectedRun.runId} />
@@ -1299,16 +1352,20 @@ function MemoPanel({
 function ArtifactInspector({
   activeTab,
   bundle,
+  evidenceTasks,
   isLoading,
   onAnnotateEvidence,
   onChangeTab,
+  onResolveEvidenceTask,
   onReviewClaim,
 }: {
   activeTab: ArtifactTab;
   bundle: RunBundle | null;
+  evidenceTasks: StudioEvidenceTask[];
   isLoading: boolean;
   onAnnotateEvidence: (evidenceId: string) => void;
   onChangeTab: (tab: ArtifactTab) => void;
+  onResolveEvidenceTask: (taskId: string) => void;
   onReviewClaim: (claimId: string, status: "approved" | "rejected") => void;
 }) {
   return (
@@ -1338,7 +1395,15 @@ function ArtifactInspector({
                 <Skeleton className="h-16" />
               </div>
             ) : (
-              renderArtifactTab(tab, bundle, onReviewClaim, onAnnotateEvidence, onChangeTab)
+              renderArtifactTab(
+                tab,
+                bundle,
+                evidenceTasks,
+                onReviewClaim,
+                onAnnotateEvidence,
+                onChangeTab,
+                onResolveEvidenceTask,
+              )
             )}
           </TabsContent>
         ))}
@@ -1348,13 +1413,17 @@ function ArtifactInspector({
 }
 
 function DecisionBrief({
+  evidenceTasks,
   memoText,
   run,
   onChangeTab,
+  onResolveEvidenceTask,
 }: {
+  evidenceTasks: StudioEvidenceTask[];
   memoText: string;
   run: RunBundle | RunSummary;
   onChangeTab: (tab: ArtifactTab) => void;
+  onResolveEvidenceTask: (taskId: string) => void;
 }) {
   const recommendation =
     extractMemoSection(memoText, "Recommendation") ||
@@ -1436,6 +1505,11 @@ function DecisionBrief({
         </div>
       ) : null}
 
+      <EvidenceTaskPanel
+        tasks={evidenceTasks}
+        onResolveTask={onResolveEvidenceTask}
+      />
+
       <div className="flex flex-wrap gap-2">
         <Button size="sm" type="button" variant="secondary" onClick={() => onChangeTab("Memo")}>
           <NotebookText className="size-3.5" />
@@ -1454,12 +1528,86 @@ function DecisionBrief({
   );
 }
 
+function EvidenceTaskPanel({
+  compact = false,
+  tasks,
+  onResolveTask,
+}: {
+  compact?: boolean;
+  tasks: StudioEvidenceTask[];
+  onResolveTask: (taskId: string) => void;
+}) {
+  const openTasks = tasks.filter((task) => task.status === "open");
+  const visibleTasks = (compact ? openTasks.slice(0, 2) : tasks.slice(0, 4));
+
+  return (
+    <section
+      aria-label="Evidence gap closure"
+      className={cn("grid gap-3 rounded-md border bg-background p-3", compact && "border-0 bg-transparent p-0")}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">Evidence gap closure</p>
+          {!compact ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Resolve a task with the source note in the ask panel, then Crux reruns with the new source pack.
+            </p>
+          ) : null}
+        </div>
+        <Badge variant={openTasks.length ? "secondary" : "outline"}>
+          {openTasks.length ? `${openTasks.length} open` : "clear"}
+        </Badge>
+      </div>
+
+      {visibleTasks.length ? (
+        <div className="grid gap-2">
+          {visibleTasks.map((task) => (
+            <div className="grid gap-2 rounded-md border bg-muted/20 p-2" key={task.taskId}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="line-clamp-2 text-sm font-medium">{task.title}</p>
+                  {!compact ? (
+                    <p className="mt-1 font-mono text-[0.68rem] uppercase text-muted-foreground">
+                      {evidenceTaskKindLabel(task.kind)}
+                    </p>
+                  ) : null}
+                </div>
+                <Badge variant={task.status === "resolved" ? "outline" : "secondary"}>
+                  {task.status}
+                </Badge>
+              </div>
+              {task.status === "open" ? (
+                <Button
+                  className="justify-self-start"
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                  onClick={() => onResolveTask(task.taskId)}
+                >
+                  <Plus className="size-3.5" />
+                  Resolve with source note
+                </Button>
+              ) : task.rerunJobId ? (
+                <p className="font-mono text-xs text-muted-foreground">Rerun job: {task.rerunJobId}</p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">No evidence gaps are open for this run.</p>
+      )}
+    </section>
+  );
+}
+
 function renderArtifactTab(
   tab: ArtifactTab,
   bundle: RunBundle | null,
+  evidenceTasks: StudioEvidenceTask[],
   onReviewClaim: (claimId: string, status: "approved" | "rejected") => void,
   onAnnotateEvidence: (evidenceId: string) => void,
   onChangeTab: (tab: ArtifactTab) => void,
+  onResolveEvidenceTask: (taskId: string) => void,
 ) {
   if (!bundle) {
     return <p className="text-sm text-muted-foreground">Select or create a run to inspect artifacts.</p>;
@@ -1469,9 +1617,11 @@ function renderArtifactTab(
     case "Brief":
       return (
         <DecisionBrief
+          evidenceTasks={evidenceTasks}
           memoText={bundle.memo}
           run={bundle}
           onChangeTab={onChangeTab}
+          onResolveEvidenceTask={onResolveEvidenceTask}
         />
       );
     case "Memo":
@@ -1481,7 +1631,7 @@ function renderArtifactTab(
     case "Evidence":
       return renderEvidence(bundle.artifacts.evidence, onAnnotateEvidence);
     case "Sources":
-      return renderSources(bundle);
+      return renderSources(bundle, evidenceTasks, onResolveEvidenceTask);
     case "Diagnostics":
       return renderDiagnostics(bundle.artifacts.diagnostics);
     case "Trace":
@@ -1669,7 +1819,11 @@ function renderAgents(value: unknown) {
   );
 }
 
-function renderSources(bundle: RunBundle) {
+function renderSources(
+  bundle: RunBundle,
+  evidenceTasks: StudioEvidenceTask[],
+  onResolveEvidenceTask: (taskId: string) => void,
+) {
   const inventory = asRecord(bundle.artifacts.sourceInventory);
   const chunksArtifact = asRecord(bundle.artifacts.sourceChunks);
   const sources = Array.isArray(inventory.sources) ? inventory.sources : [];
@@ -1698,6 +1852,11 @@ function renderSources(bundle: RunBundle) {
           </div>
         ) : null}
       </div>
+
+      <EvidenceTaskPanel
+        tasks={evidenceTasks}
+        onResolveTask={onResolveEvidenceTask}
+      />
 
       {sources.length ? (
         <ItemGroup>
@@ -2165,6 +2324,17 @@ function runJobLabel(status: RunJob["status"]): string {
   return labels[status];
 }
 
+function evidenceTaskKindLabel(kind: StudioEvidenceTask["kind"]): string {
+  const labels: Record<StudioEvidenceTask["kind"], string> = {
+    missing_evidence: "Missing evidence",
+    trust_blocker: "Trust blocker",
+    agent_blocker: "Agent blocker",
+    agent_next_action: "Agent next action",
+  };
+
+  return labels[kind];
+}
+
 function upsertRun(current: RunSummary[], run: RunSummary): RunSummary[] {
   return [run, ...current.filter((item) => item.runId !== run.runId)];
 }
@@ -2173,8 +2343,23 @@ function upsertJob(current: RunJob[], job: RunJob): RunJob[] {
   return [job, ...current.filter((item) => item.jobId !== job.jobId)];
 }
 
+function upsertEvidenceTask(
+  current: StudioEvidenceTask[],
+  task: StudioEvidenceTask,
+): StudioEvidenceTask[] {
+  return [task, ...current.filter((item) => item.taskId !== task.taskId)];
+}
+
 function upsertById<T extends { id: string }>(current: T[], item: T): T[] {
   return [item, ...current.filter((candidate) => candidate.id !== item.id)];
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
 }
 
 async function readSourceDraftFile(file: File): Promise<SourceDraftFile> {

@@ -135,6 +135,8 @@ GET    /api/runs/jobs
 GET    /api/runs/jobs/:jobId
 POST   /api/runs/jobs/:jobId/cancel
 POST   /api/runs/jobs/:jobId/retry
+GET    /api/runs/:runId/evidence-tasks
+POST   /api/runs/:runId/evidence-tasks/:taskId/resolve
 GET    /api/runs
 GET    /api/runs/:runId
 GET    /api/runs/:runId/artifacts/:artifact
@@ -175,9 +177,10 @@ v0.1:
 - use harness `runs/` folder as source of truth
 - Studio server indexes run directories
 - Studio state is persisted in `.studio/studio-state.json`
-- projects, source packs, run links, review state, and lifecycle job history are local durable state
+- projects, source packs, run links, review state, lifecycle job history, and evidence closure tasks are local durable state
 - queued lifecycle jobs recover after local server restart
 - interrupted running lifecycle jobs become failed and retryable after local server restart
+- evidence closure task resolution creates a local source pack and starts a lifecycle rerun
 - no hosted database yet
 
 v0.2:

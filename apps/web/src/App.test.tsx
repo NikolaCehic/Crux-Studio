@@ -247,12 +247,63 @@ const mockFailedJob = {
   error: "Run job interrupted by a server restart before completion. Retry the job to run it again.",
 };
 
+const mockEvidenceTask = {
+  taskId: "task-current-response-time-baseline",
+  runId: "mock-ask",
+  projectId: "project-bakery",
+  status: "open",
+  kind: "missing_evidence",
+  title: "Current response-time baseline",
+  detail: "Current response-time baseline",
+  createdAt: "2026-05-01T10:00:00.000Z",
+  updatedAt: "2026-05-01T10:00:00.000Z",
+};
+
+const mockResolutionJob = {
+  ...mockQueuedJob,
+  jobId: "job-gap-resolution",
+  input: {
+    ...mockQueuedJob.input,
+    sourcePackId: "source-pack-evidence-gap",
+    sourcePolicy: "hybrid",
+  },
+};
+
+const mockResolvedEvidenceTask = {
+  ...mockEvidenceTask,
+  status: "resolved",
+  resolvedAt: "2026-05-01T10:00:03.000Z",
+  resolvedBySourcePackId: "source-pack-evidence-gap",
+  rerunJobId: "job-gap-resolution",
+};
+
 describe("Crux Studio Ask workflow", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
+
+        if (url.endsWith("/api/runs/mock-ask/evidence-tasks/task-current-response-time-baseline/resolve")) {
+          return new Response(
+            JSON.stringify({
+              task: mockResolvedEvidenceTask,
+              sourcePack: { ...mockSourcePack, id: "source-pack-evidence-gap", sourceCount: 1 },
+              job: mockResolutionJob,
+            }),
+            {
+              status: 201,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        if (url.endsWith("/api/runs/mock-ask/evidence-tasks")) {
+          return new Response(JSON.stringify([mockEvidenceTask]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
 
         if (url.endsWith("/api/runs/jobs") && init?.method === "POST") {
           return new Response(JSON.stringify(mockQueuedJob), {
@@ -278,7 +329,11 @@ describe("Crux Studio Ask workflow", () => {
           );
         }
 
-        if (url.endsWith("/api/runs/jobs/job-mock-ask") || url.endsWith("/api/runs/jobs/job-retry")) {
+        if (
+          url.endsWith("/api/runs/jobs/job-mock-ask") ||
+          url.endsWith("/api/runs/jobs/job-retry") ||
+          url.endsWith("/api/runs/jobs/job-gap-resolution")
+        ) {
           return new Response(JSON.stringify(mockCompletedJob), {
             status: 200,
             headers: { "Content-Type": "application/json" },
@@ -334,7 +389,7 @@ describe("Crux Studio Ask workflow", () => {
                 {
                   id: "mock",
                   status: "active",
-                  capabilities: ["ask", "inspect", "sources", "review", "compare", "agents", "lifecycle"],
+                  capabilities: ["ask", "inspect", "sources", "review", "compare", "agents", "lifecycle", "evidence-tasks"],
                 },
               ],
             }),
@@ -456,6 +511,18 @@ describe("Crux Studio Ask workflow", () => {
     expect(screen.getAllByText("Usable with warnings").length).toBeGreaterThan(0);
     expect(screen.getAllByText("warn").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Use a staged approach/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Evidence gap closure").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Current response-time baseline").length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText("Source content"), {
+      target: { value: "# Baseline\n\nMedian first-response time was 64 minutes last week." },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Resolve with source note" })[0]);
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/runs/mock-ask/evidence-tasks/task-current-response-time-baseline/resolve",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
     expect(screen.getByText("runs/mock-ask/decision_memo.md")).toBeInTheDocument();
     expect(screen.getAllByText(/Offline mock run/).length).toBeGreaterThan(0);
   });

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.10.0 - 2026-05-02
+
+- Added evidence gap closure tasks generated from missing evidence, trust blockers, agent blockers, and source-related agent next actions.
+- Added API endpoints to list run evidence tasks and resolve a task with source material.
+- Resolution now creates a source pack, marks the task resolved, starts a lifecycle rerun, and preserves the rerun job ID.
+- Added Studio evidence gap closure panels in the decision brief, Sources tab, and right inspector.
+- Added UI support for resolving an evidence task with the current source note.
+- Added product workflow tests proving evidence tasks can be resolved, rerun, and compared.
+- Expanded local smoke to verify evidence task generation, source-backed resolution, lifecycle rerun, and comparison.
+- Added the Phase 13 evidence gap closure loop spec artifact.
+
 ## 0.9.0 - 2026-05-02
 
 - Added durable lifecycle persistence in the Studio store for every run-job transition.

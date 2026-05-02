@@ -203,4 +203,129 @@ describe("Studio product workflow API", () => {
     );
     expect(providers.json().providers[0].capabilities).toContain("agents");
   });
+
+  it("turns evidence gaps into source tasks that can be resolved, rerun, and compared", async () => {
+    const provider = new MockCruxProvider({
+      now: () => "2026-05-01T13:00:00.000Z",
+    });
+    const store = createMemoryStudioStore({
+      now: () => "2026-05-01T13:00:00.000Z",
+    });
+    const app = buildServer({ provider, store });
+    apps.push(app);
+
+    const projectResponse = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: { name: "Support Ops" },
+    });
+    const project = projectResponse.json();
+
+    const draftRunResponse = await app.inject({
+      method: "POST",
+      url: "/api/runs/ask",
+      payload: {
+        projectId: project.id,
+        question: "How should support reduce first-response time this month?",
+        context: "No new hiring.",
+        sourcePolicy: "offline",
+      },
+    });
+    expect(draftRunResponse.statusCode).toBe(201);
+    const draftRun = draftRunResponse.json();
+    expect(draftRun.readiness.status).toBe("usable_with_warnings");
+
+    const taskResponse = await app.inject({
+      method: "GET",
+      url: `/api/runs/${draftRun.runId}/evidence-tasks`,
+    });
+    expect(taskResponse.statusCode).toBe(200);
+    expect(taskResponse.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runId: draftRun.runId,
+          status: "open",
+          title: expect.stringContaining("Attach source material"),
+        }),
+      ]),
+    );
+    const task = taskResponse.json()[0];
+
+    const resolutionResponse = await app.inject({
+      method: "POST",
+      url: `/api/runs/${draftRun.runId}/evidence-tasks/${task.taskId}/resolve`,
+      payload: {
+        sourcePackName: "Support baseline evidence",
+        sourceName: "baseline.md",
+        sourceContent: "# Baseline\n\nMedian first-response time was 64 minutes last week. Monday handoffs created the largest delay.",
+        note: "Baseline added from support operations notes.",
+      },
+    });
+    expect(resolutionResponse.statusCode).toBe(201);
+    expect(resolutionResponse.json()).toEqual(
+      expect.objectContaining({
+        task: expect.objectContaining({ status: "resolved", resolvedBySourcePackId: expect.any(String) }),
+        sourcePack: expect.objectContaining({ sourceCount: 1 }),
+        job: expect.objectContaining({
+          status: "queued",
+          input: expect.objectContaining({
+            projectId: project.id,
+            sourcePolicy: "hybrid",
+          }),
+        }),
+      }),
+    );
+
+    const job = resolutionResponse.json().job;
+    const completedJob = await waitForJob(app, job.jobId, "succeeded");
+    expect(completedJob.run.sourceWorkspace.sourceCount).toBe(1);
+    expect(completedJob.run.readiness.status).toBe("ready");
+
+    const resolvedTasks = await app.inject({
+      method: "GET",
+      url: `/api/runs/${draftRun.runId}/evidence-tasks`,
+    });
+    expect(resolvedTasks.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          taskId: task.taskId,
+          status: "resolved",
+          rerunJobId: job.jobId,
+        }),
+      ]),
+    );
+
+    const compareResponse = await app.inject({
+      method: "POST",
+      url: "/api/runs/compare",
+      payload: { leftRunId: draftRun.runId, rightRunId: completedJob.run.runId },
+    });
+    expect(compareResponse.statusCode).toBe(200);
+    expect(compareResponse.json().summary).toEqual(
+      expect.objectContaining({
+        leftReadiness: "usable_with_warnings",
+        rightReadiness: "ready",
+      }),
+    );
+    expect(compareResponse.json().trustMovement).toBeGreaterThan(0);
+  });
 });
+
+async function waitForJob(
+  app: ReturnType<typeof buildServer>,
+  jobId: string,
+  status: string,
+) {
+  for (let index = 0; index < 20; index += 1) {
+    const response = await app.inject({ method: "GET", url: `/api/runs/jobs/${jobId}` });
+    expect(response.statusCode).toBe(200);
+    const job = response.json();
+    if (job.status === status) {
+      return job;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  throw new Error(`Job ${jobId} did not reach ${status}.`);
+}

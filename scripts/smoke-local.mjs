@@ -101,6 +101,47 @@ async function main() {
     throw new Error(`Source-backed run did not preserve source inventory/chunks: ${sourceCount}/${sourceChunkCount}`);
   }
 
+  const gapBaseJob = await postJson(`${serverUrl}/api/runs/jobs`, {
+    projectId: project.id,
+    question: "What evidence would make the support first-response recommendation ready to act on?",
+    context: "Create a source-free draft so Studio can generate evidence closure tasks.",
+    timeHorizon: "30 days",
+    sourcePolicy: "offline",
+  });
+  const completedGapBaseJob = await waitForJob(gapBaseJob.jobId);
+  const gapBaseRun = completedGapBaseJob.run;
+  if (!gapBaseRun?.runId) {
+    throw new Error(`Evidence gap base job ${gapBaseJob.jobId} did not return a run.`);
+  }
+  const evidenceTasks = await getJson(`${serverUrl}/api/runs/${gapBaseRun.runId}/evidence-tasks`);
+  const openEvidenceTask = evidenceTasks.find((task) => task.status === "open");
+  if (!openEvidenceTask) {
+    throw new Error(`Run ${gapBaseRun.runId} did not produce an open evidence task.`);
+  }
+  const resolvedEvidenceTask = await postJson(
+    `${serverUrl}/api/runs/${gapBaseRun.runId}/evidence-tasks/${openEvidenceTask.taskId}/resolve`,
+    {
+      sourcePackName: `Evidence closure smoke ${stamp}`,
+      sourceName: "gap-closure.md",
+      sourceContent: "# Gap closure\n\nMonday handoff notes show that triage ownership and macro coverage are the two highest-leverage response-time inputs.",
+      note: "Resolved by local smoke evidence closure.",
+    },
+  );
+  const completedEvidenceClosureJob = await waitForJob(resolvedEvidenceTask.job.jobId);
+  const evidenceClosureRun = completedEvidenceClosureJob.run;
+  if (!evidenceClosureRun?.runId) {
+    throw new Error(`Evidence closure job ${resolvedEvidenceTask.job.jobId} did not return a run.`);
+  }
+  const evidenceClosureBundle = await getJson(`${serverUrl}/api/runs/${evidenceClosureRun.runId}`);
+  const closureComparison = await postJson(`${serverUrl}/api/runs/compare`, {
+    leftRunId: gapBaseRun.runId,
+    rightRunId: evidenceClosureRun.runId,
+  });
+  const closureSourceCount = evidenceClosureBundle.sourceWorkspace?.sourceCount ?? 0;
+  if (closureSourceCount < 1) {
+    throw new Error(`Evidence closure run did not attach source evidence: ${closureSourceCount}`);
+  }
+
   console.log(JSON.stringify({
     ok: health.ok === true,
     provider: provider?.id ?? "unknown",
@@ -123,6 +164,15 @@ async function main() {
       readiness: sourceBackedRun.readiness?.status,
       sourceCount,
       sourceChunkCount,
+    },
+    evidenceClosure: {
+      baseRunId: gapBaseRun.runId,
+      taskId: openEvidenceTask.taskId,
+      resolvedTaskStatus: resolvedEvidenceTask.task.status,
+      rerunJobId: resolvedEvidenceTask.job.jobId,
+      rerunId: evidenceClosureRun.runId,
+      rerunSourceCount: closureSourceCount,
+      comparisonDifferences: closureComparison.summary?.differenceCount ?? closureComparison.differences?.length ?? 0,
     },
   }, null, 2));
 }

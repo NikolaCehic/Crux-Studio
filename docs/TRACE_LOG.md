@@ -1,5 +1,46 @@
 # Trace Log
 
+## 2026-05-02T20:47:00+02:00 - Phase 13 Evidence Gap Closure Loop
+
+Intent:
+
+- Implement the next productization phase under the required phase contract: full implementation, E2E/smoke tests, spec validation, artifacts, and next-phase handoff.
+- Make source gaps actionable instead of merely visible.
+
+Implemented:
+
+- Added durable evidence task state to the Studio store.
+- Added task generation from missing evidence, trust blockers, agent blockers, and source-related agent next actions.
+- Added evidence task endpoints for listing and resolving run tasks.
+- Added task resolution that creates a source pack, marks the task resolved, starts a lifecycle rerun, and stores rerun-job provenance.
+- Added `evidence-tasks` to provider capability reporting.
+- Added Studio evidence gap closure panels in the decision brief, Sources tab, and right inspector.
+- Added a Studio action to resolve an open task with the current source note.
+- Expanded local smoke to generate an evidence task, resolve it with source material, rerun Crux, and compare the improved run.
+- Added `docs/PHASE_13_EVIDENCE_GAP_CLOSURE_SPEC.md`.
+
+Verification:
+
+- Failing server and web workflow expectations were written first and passed after implementation.
+- Focused server product workflow test passed: `pnpm --filter @crux-studio/server test -- src/product-workflow.test.ts`.
+- Focused web workflow test passed: `pnpm --filter @crux-studio/web test -- src/App.test.tsx`.
+- Focused server and web typechecks passed.
+- Full Studio verification passed: `pnpm verify`.
+- Local smoke passed: `pnpm smoke:local`.
+- Final source-backed smoke job: `job-20260502184802-57219ed2`.
+- Final source-backed smoke run: `20260502T184802Z-how-should-a-support-team-reduce-first-response-`.
+- Final evidence base run: `20260502T184802Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence task: `task-6c2039cd-12-adversarial-scenario-remove-evidence`.
+- Final evidence closure rerun job: `job-20260502184803-5a02067b`.
+- Final evidence closure rerun: `20260502T184803Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence closure result: task `resolved`, rerun source count `1`, comparison differences `5`.
+- Refreshed README workbench screenshot: `docs/assets/crux-studio-workbench.png`.
+
+Result:
+
+- Phase 13 is done.
+- Next phase: Phase 14 Decision Delta Report.
+
 ## 2026-05-02T20:18:00+02:00 - Phase 12 Durable Lifecycle Recovery
 
 Intent:

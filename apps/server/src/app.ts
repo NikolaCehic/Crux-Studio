@@ -1,14 +1,16 @@
 import type {
   AskInput,
   CruxProvider,
+  RunBundle,
   RunSummary,
   SourcePolicy,
 } from "@crux-studio/crux-provider";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import { z } from "zod";
 import {
   createMemoryStudioStore,
+  type StudioEvidenceTask,
   type StudioRunJob,
   type StudioRunJobStatus,
   type StudioStore,
@@ -56,6 +58,13 @@ const evidenceAnnotationSchema = z.object({
 const compareSchema = z.object({
   leftRunId: z.string().min(1),
   rightRunId: z.string().min(1),
+});
+
+const evidenceTaskResolutionSchema = z.object({
+  sourcePackName: z.string().min(1).optional(),
+  sourceName: z.string().min(1).optional(),
+  sourceContent: z.string().min(1),
+  note: z.string().optional(),
 });
 
 type BuildServerOptions = {
@@ -326,6 +335,23 @@ export function buildServer({
     );
   }
 
+  async function ensureEvidenceTasks(runId: string): Promise<StudioEvidenceTask[]> {
+    const existing = await store.listEvidenceTasks(runId);
+    if (existing.length > 0) {
+      return existing;
+    }
+
+    const bundle = await provider.getRun(runId);
+    const link = await store.getRunLink(runId);
+    const tasks = createEvidenceTasksFromRun(bundle, link?.projectId, now());
+
+    for (const task of tasks) {
+      await store.saveEvidenceTask(task);
+    }
+
+    return store.listEvidenceTasks(runId);
+  }
+
   setTimeout(() => void ensureRecoveredJobs(), 0);
 
   app.get("/health", async () => ({
@@ -342,6 +368,7 @@ export function buildServer({
           "ask",
           "inspect",
           "lifecycle",
+          "evidence-tasks",
           "sources",
           "review",
           "replay",
@@ -471,6 +498,75 @@ export function buildServer({
         enrichRun(run, await store.getRunLink(run.runId)),
       ),
     ),
+  );
+
+  app.get<{ Params: { runId: string } }>(
+    "/api/runs/:runId/evidence-tasks",
+    async (request, reply) => {
+      try {
+        return await ensureEvidenceTasks(request.params.runId);
+      } catch {
+        return reply.code(404).send({ message: "Run not found." });
+      }
+    },
+  );
+
+  app.post<{ Params: { runId: string; taskId: string } }>(
+    "/api/runs/:runId/evidence-tasks/:taskId/resolve",
+    async (request, reply) => {
+      const parsed = evidenceTaskResolutionSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ message: "Evidence task resolution requires source content." });
+      }
+
+      try {
+        const tasks = await ensureEvidenceTasks(request.params.runId);
+        const task = tasks.find((item) => item.taskId === request.params.taskId);
+        if (!task) {
+          return reply.code(404).send({ message: "Evidence task not found." });
+        }
+
+        if (task.status === "resolved") {
+          return reply.code(409).send({ message: "Evidence task is already resolved." });
+        }
+
+        const bundle = await provider.getRun(request.params.runId);
+        const link = await store.getRunLink(bundle.runId);
+        const projectId = task.projectId ?? link?.projectId ?? (await store.createProject(`Evidence Closure ${bundle.runId.slice(0, 12)}`)).id;
+        const sourcePack = await store.createSourcePack({
+          projectId,
+          name: parsed.data.sourcePackName?.trim() || `Evidence closure for ${task.title}`,
+          files: [
+            {
+              name: parsed.data.sourceName?.trim() || `${slugify(task.title) || "evidence-gap"}.md`,
+              content: parsed.data.sourceContent,
+            },
+          ],
+        });
+        const job = await createRunJob({
+          projectId,
+          sourcePackId: sourcePack.id,
+          question: bundle.question,
+          context: evidenceClosureContext(bundle, task, parsed.data.note),
+          timeHorizon: "same as source run",
+          sourcePolicy: "hybrid",
+        });
+        const resolvedAt = now();
+        const resolvedTask = await store.saveEvidenceTask({
+          ...task,
+          status: "resolved",
+          updatedAt: resolvedAt,
+          resolvedAt,
+          resolvedBySourcePackId: sourcePack.id,
+          rerunJobId: job.jobId,
+          resolutionNote: parsed.data.note?.trim() || undefined,
+        });
+
+        return reply.code(201).send({ task: resolvedTask, sourcePack, job });
+      } catch {
+        return reply.code(404).send({ message: "Run not found." });
+      }
+    },
   );
 
   app.get<{ Params: { runId: string; artifactName: string } }>(
@@ -675,6 +771,93 @@ function enrichRun<T extends { runId: string }>(
   link: { projectId?: string; sourcePackId?: string } | undefined,
 ): T & { projectId?: string; sourcePackId?: string } {
   return link ? { ...run, projectId: link.projectId, sourcePackId: link.sourcePackId } : run;
+}
+
+function createEvidenceTasksFromRun(
+  bundle: RunBundle,
+  projectId: string | undefined,
+  createdAt: string,
+): StudioEvidenceTask[] {
+  const seeds = uniqueEvidenceSeeds([
+    ...(bundle.sourceWorkspace?.missingEvidence ?? []).map((detail) => ({
+      kind: "missing_evidence" as const,
+      title: detail,
+      detail,
+    })),
+    ...bundle.trust.blockingIssues.map((detail) => ({
+      kind: "trust_blocker" as const,
+      title: detail,
+      detail,
+    })),
+    ...(bundle.agents?.blockingIssues ?? []).map((detail) => ({
+      kind: "agent_blocker" as const,
+      title: detail,
+      detail,
+    })),
+    ...(bundle.agents?.nextActions ?? [])
+      .filter(isEvidenceAction)
+      .map((detail) => ({
+        kind: "agent_next_action" as const,
+        title: detail,
+        detail,
+      })),
+  ]);
+
+  return seeds.map((seed, index) => ({
+    taskId: `task-${shortRunKey(bundle.runId)}-${index + 1}-${slugify(seed.title).slice(0, 36) || seed.kind}`,
+    runId: bundle.runId,
+    projectId,
+    status: "open",
+    kind: seed.kind,
+    title: seed.title,
+    detail: seed.detail,
+    createdAt,
+    updatedAt: createdAt,
+  }));
+}
+
+function uniqueEvidenceSeeds(
+  seeds: Array<Pick<StudioEvidenceTask, "kind" | "title" | "detail">>,
+) {
+  const seen = new Set<string>();
+  return seeds.filter((seed) => {
+    const key = `${seed.kind}:${seed.detail.toLowerCase()}`;
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function isEvidenceAction(value: string): boolean {
+  return /\b(source|evidence|attach|missing|rerun)\b/i.test(value);
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 56);
+}
+
+function shortRunKey(runId: string): string {
+  return createHash("sha256").update(runId).digest("hex").slice(0, 8);
+}
+
+function evidenceClosureContext(
+  bundle: RunBundle,
+  task: StudioEvidenceTask,
+  note: string | undefined,
+): string {
+  return [
+    `Evidence closure rerun for ${bundle.runId}.`,
+    `Task: ${task.title}`,
+    `Task type: ${task.kind}`,
+    note?.trim() ? `Resolution note: ${note.trim()}` : undefined,
+  ].filter(Boolean).join("\n");
 }
 
 function renderReviewedMemo(
