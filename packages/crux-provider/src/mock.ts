@@ -59,12 +59,34 @@ export class MockCruxProvider implements CruxProvider {
       answerability: "answerable_with_assumptions",
       risk: "medium",
       createdAt,
+      harnessVersion: "mock",
       trust: {
         status: blockingIssues.length > 0 ? "warn" : "pass",
         confidence: blockingIssues.length > 0 ? 0.68 : 0.86,
         blockingIssues,
       },
+      readiness: hasSourcePack
+        ? {
+            status: "ready",
+            label: "Ready for review",
+            reason: "Source context and bounded agents are available for inspection.",
+            blockerCount: 0,
+            nextAction: "Review claims and export the memo when approved.",
+          }
+        : {
+            status: "usable_with_warnings",
+            label: "Usable with warnings",
+            reason: "The run is inspectable but still needs source material before operational use.",
+            blockerCount: blockingIssues.length + agentBlockingIssues.length,
+            nextAction: agentNextActions[0],
+          },
       agents: agentSummary,
+      sourceWorkspace: {
+        sourceCount: input.sourcePack?.sourceCount ?? 0,
+        sourceChunkCount: input.sourcePack?.sourceCount ?? 0,
+        missingEvidence: hasSourcePack ? [] : ["Attach source material for the top evidence gap."],
+        sourcePackName: input.sourcePack?.name,
+      },
       paths: {
         generatedInput: `runs/query-inputs/${runId}.yaml`,
         queryIntake: `${runDir}/query_intake.json`,
@@ -144,6 +166,24 @@ export class MockCruxProvider implements CruxProvider {
             "Whether source evidence would change the recommended next test.",
           ],
         },
+        sourceInventory: {
+          source_pack: input.sourcePack
+            ? { path: input.sourcePack.path ?? null, mode: "studio" }
+            : { path: null, mode: "none" },
+          sources: input.sourcePack?.files?.map((file, index) => ({
+            id: `source-${index + 1}`,
+            title: file.name,
+            path: file.name,
+            type: "studio_upload",
+          })) ?? [],
+        },
+        sourceChunks: {
+          chunks: input.sourcePack?.files?.map((file, index) => ({
+            id: `chunk-${index + 1}`,
+            source_id: `source-${index + 1}`,
+            text: file.content.slice(0, 500),
+          })) ?? [],
+        },
         agentManifest: {
           mode: "bounded",
           agents: [
@@ -218,6 +258,18 @@ export class MockCruxProvider implements CruxProvider {
             { id: "evidence-auditor", status: "warn", score: 0.68 },
             { id: "decision-utility-auditor", status: "pass", score: 0.82 },
           ],
+        },
+        evalReport: {
+          scores: {
+            source_quality: hasSourcePack ? 0.82 : 0.55,
+            decision_usefulness: 0.82,
+          },
+          council: {
+            synthesis: {
+              status: summary.trust.status,
+              confidence: summary.trust.confidence,
+            },
+          },
         },
         diagnostics: {
           blockingIssues,

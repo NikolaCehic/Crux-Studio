@@ -38,6 +38,16 @@ export type TrustGate = {
   blockingIssues: string[];
 };
 
+export type ReadinessStatus = "ready" | "usable_with_warnings" | "blocked";
+
+export type ReadinessSummary = {
+  status: ReadinessStatus;
+  label: string;
+  reason: string;
+  blockerCount: number;
+  nextAction?: string;
+};
+
 export type AgentSummary = {
   status: TrustStatus;
   confidence: number;
@@ -46,6 +56,13 @@ export type AgentSummary = {
   failingCount: number;
   blockingIssues: string[];
   nextActions: string[];
+};
+
+export type SourceWorkspaceSummary = {
+  sourceCount: number;
+  sourceChunkCount: number;
+  missingEvidence: string[];
+  sourcePackName?: string;
 };
 
 export type RunSummary = {
@@ -59,8 +76,11 @@ export type RunSummary = {
   answerability: string;
   risk: string;
   createdAt: string;
+  harnessVersion?: string;
   trust: TrustGate;
+  readiness: ReadinessSummary;
   agents?: AgentSummary;
+  sourceWorkspace?: SourceWorkspaceSummary;
   paths: RunPaths;
   memoPreview: string;
 };
@@ -101,9 +121,12 @@ export type RunBundle = RunSummary & {
     evidence?: unknown;
     contradictions?: unknown;
     uncertainty?: unknown;
+    sourceInventory?: unknown;
+    sourceChunks?: unknown;
     agentManifest?: unknown;
     agents?: unknown;
     council?: unknown;
+    evalReport?: unknown;
     diagnostics?: unknown;
     trace?: unknown[];
   };

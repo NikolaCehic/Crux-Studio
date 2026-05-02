@@ -20,6 +20,20 @@ describe("MockCruxProvider contract", () => {
       "How should support reduce first-response time this month?",
     );
     expect(run.trust.status).toBe("warn");
+    expect(run.readiness).toEqual(
+      expect.objectContaining({
+        status: "usable_with_warnings",
+        label: "Usable with warnings",
+      }),
+    );
+    expect(run.sourceWorkspace).toEqual(
+      expect.objectContaining({
+        sourceCount: 0,
+        missingEvidence: expect.arrayContaining([
+          "Attach source material for the top evidence gap.",
+        ]),
+      }),
+    );
     expect(run.trust.blockingIssues).toContain(
       "Offline mock run has no source inventory yet.",
     );
@@ -57,6 +71,9 @@ describe("MockCruxProvider contract", () => {
         expect.objectContaining({ stage: "mock-provider.ask" }),
       ]),
     );
+    expect(bundle.artifacts.sourceInventory).toEqual(
+      expect.objectContaining({ sources: [] }),
+    );
   });
 
   it("strengthens a mock run when source-pack context is supplied", async () => {
@@ -83,6 +100,13 @@ describe("MockCruxProvider contract", () => {
     });
 
     expect(run.trust.status).toBe("pass");
+    expect(run.readiness.status).toBe("ready");
+    expect(run.sourceWorkspace).toEqual(
+      expect.objectContaining({
+        sourceCount: 2,
+        sourcePackName: "Wholesale order evidence",
+      }),
+    );
     const bundle = await provider.getRun(run.runId);
     expect(bundle.artifacts.queryIntake).toEqual(
       expect.objectContaining({

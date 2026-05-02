@@ -12,10 +12,18 @@ const mockRun = {
   answerability: "answerable_with_assumptions",
   risk: "medium",
   createdAt: "2026-05-01T10:00:00.000Z",
+  harnessVersion: "mock",
   trust: {
     status: "warn",
     confidence: 0.68,
     blockingIssues: ["Offline mock run has no source inventory yet."],
+  },
+  readiness: {
+    status: "usable_with_warnings",
+    label: "Usable with warnings",
+    reason: "The run is inspectable, but warnings or missing evidence still need review.",
+    blockerCount: 2,
+    nextAction: "Attach source material and rerun before relying on the memo.",
   },
   agents: {
     status: "warn",
@@ -25,6 +33,12 @@ const mockRun = {
     failingCount: 0,
     blockingIssues: ["Research Scout: No source material is attached to the run."],
     nextActions: ["Attach source material and rerun before relying on the memo."],
+  },
+  sourceWorkspace: {
+    sourceCount: 1,
+    sourceChunkCount: 2,
+    sourcePackName: "Wholesale intake notes",
+    missingEvidence: ["Current response-time baseline"],
   },
   paths: {
     generatedInput: "runs/query-inputs/mock-ask.yaml",
@@ -76,6 +90,15 @@ const mockBundle = {
           supports: ["claim-1"],
           challenges: [],
         },
+      ],
+    },
+    sourceInventory: {
+      sources: [{ id: "source-1", title: "Wholesale intake notes", path: "notes.md" }],
+    },
+    sourceChunks: {
+      chunks: [
+        { id: "chunk-1", source_id: "source-1", text: "Queue policy changed." },
+        { id: "chunk-2", source_id: "source-1", text: "Response times improved." },
       ],
     },
     diagnostics: {
@@ -140,6 +163,10 @@ const mockBundle = {
           input_artifacts: ["agent_findings.json"],
         },
       ],
+    },
+    evalReport: {
+      scores: { source_quality: 0.64, decision_usefulness: 0.82 },
+      council: { synthesis: { status: "warn", confidence: 0.68 } },
     },
     trace: [
       {
@@ -251,6 +278,27 @@ describe("Crux Studio Ask workflow", () => {
           );
         }
 
+        if (url.endsWith("/api/demos")) {
+          return new Response(
+            JSON.stringify({
+              demos: [
+                {
+                  id: "support-response-time",
+                  title: "Support response time",
+                  question: "How should a support team reduce first-response time without hiring more agents this month?",
+                  context: "No new hiring.",
+                  timeHorizon: "30 days",
+                  sourcePolicy: "hybrid",
+                },
+              ],
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+
         if (url.endsWith("/review/claims") || url.endsWith("/review/evidence")) {
           return new Response(JSON.stringify(mockReview), {
             status: 201,
@@ -334,6 +382,7 @@ describe("Crux Studio Ask workflow", () => {
     });
 
     expect(await screen.findByText("Trust gate")).toBeInTheDocument();
+    expect(screen.getByText("Usable with warnings")).toBeInTheDocument();
     expect(screen.getAllByText("warn").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Use a staged approach/).length).toBeGreaterThan(0);
     expect(screen.getByText("runs/mock-ask/decision_memo.md")).toBeInTheDocument();
@@ -364,6 +413,11 @@ describe("Crux Studio Ask workflow", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Evidence" }));
     expect(screen.getByText(/first-response gains/)).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("tab", { name: "Sources" }));
+    expect(screen.getByText("Source workspace")).toBeInTheDocument();
+    expect(screen.getAllByText("Current response-time baseline").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Wholesale intake notes/).length).toBeGreaterThan(0);
+
     fireEvent.click(screen.getByRole("tab", { name: "Diagnostics" }));
     expect(screen.getAllByText(/Attach source material/).length).toBeGreaterThan(0);
 
@@ -379,14 +433,24 @@ describe("Crux Studio Ask workflow", () => {
       "href",
       "/api/runs/mock-ask/export/memo",
     );
+    expect(screen.getByRole("link", { name: "Decision package" })).toHaveAttribute(
+      "href",
+      "/api/runs/mock-ask/export/decision-package",
+    );
   });
 
   it("exposes project, source, review, replay, compare, and provider controls", async () => {
     render(<App />);
 
     expect(await screen.findByText("Provider: mock")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Support response time" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Support response time" }));
+    expect(screen.getByLabelText("Question")).toHaveValue(
+      "How should a support team reduce first-response time without hiring more agents this month?",
+    );
     expect(screen.getByText("Bounded agents")).toBeInTheDocument();
     expect(screen.getByText("6 agents")).toBeInTheDocument();
+    expect(screen.getAllByText("Sources").length).toBeGreaterThan(0);
     expect(screen.getByRole("combobox", { name: "Project" })).toHaveDisplayValue(
       "Bakery Operations",
     );

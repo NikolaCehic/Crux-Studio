@@ -1,5 +1,41 @@
 # Trace Log
 
+## 2026-05-02T18:38:00+02:00 - Local-First Productization Completion
+
+Intent:
+
+- Continue beyond the agent-aware bridge and implement the rest of the local-first productization plan.
+- Keep hosted control-plane work deferred.
+- Preserve TDD, provider boundary discipline, and a traceable changelog.
+
+Implemented:
+
+- Added canonical demo questions at `/api/demos`.
+- Added demo question controls in the ask panel.
+- Added `ReadinessSummary` and `SourceWorkspaceSummary` to the provider contract.
+- Mapped Harness version, source inventory, source chunks, eval report, source gaps, and readiness through the local provider.
+- Added a Readiness inspector card and a Sources inspector card.
+- Added a Sources artifact tab with source/chunk summaries and missing evidence.
+- Added source inventory, source chunks, and eval report artifact endpoints.
+- Added full decision package Markdown export.
+- Expanded comparison output with readiness, agent, source, and run identity differences.
+- Added `docs/DEMO_GUIDE.md`.
+- Added `pnpm dev:local`, `pnpm smoke:local`, and `pnpm verify`.
+
+Verification:
+
+- Focused provider tests passed.
+- Focused server tests passed.
+- Focused web tests passed after adjusting assertions for intentionally repeated source-copy surfaces.
+- `pnpm check` passed after exporting the new provider summary types.
+- `pnpm verify` passed: provider tests, server tests, web tests, TypeScript checks, and production build.
+- `pnpm smoke:local` passed against `CRUX_STUDIO_PROVIDER=local` and `/Users/nikolacehic/Desktop/crux-harness`.
+- Smoke result: provider `local`, capabilities `ask`, `inspect`, `sources`, `review`, `replay`, `compare`, `agents`, `demos`, `readiness`, `export`; 5 demo questions; latest agent-aware run had 6 agents.
+
+Result:
+
+- The Studio now covers the full local-first product loop: demo, ask, inspect readiness, inspect agents, inspect sources, review, replay, compare, export, and smoke verify.
+
 ## 2026-05-02T18:16:00+02:00 - Productization Plan And Agent-Aware Studio Integration
 
 Intent:

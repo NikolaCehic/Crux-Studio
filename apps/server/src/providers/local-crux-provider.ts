@@ -2,8 +2,10 @@ import type {
   AgentSummary,
   AskInput,
   CruxProvider,
+  ReadinessSummary,
   RunBundle,
   RunSummary,
+  SourceWorkspaceSummary,
   SourcePolicy,
   TrustStatus,
 } from "@crux-studio/crux-provider";
@@ -21,9 +23,14 @@ type HarnessRunResult = {
 type HarnessArtifactBundle = {
   run_dir?: string;
   question_spec?: { question?: string };
-  run_config?: { input?: { question?: string; query_intake?: Record<string, unknown> } };
+  run_config?: {
+    harness_version?: string;
+    source_pack?: string | null;
+    input?: { question?: string; query_intake?: Record<string, unknown> };
+  };
   decision_memo?: string;
   eval_report?: {
+    scores?: Record<string, number>;
     council?: {
       synthesis?: {
         status?: string;
@@ -35,8 +42,15 @@ type HarnessArtifactBundle = {
   };
   claims?: unknown;
   evidence?: unknown;
-  contradictions?: unknown;
+  contradictions?: {
+    missing_evidence?: string[];
+    contradictions?: unknown[];
+  };
   uncertainty?: unknown;
+  summary?: {
+    source_count?: number;
+    source_chunk_count?: number;
+  };
   agent_manifest?: unknown;
   agent_findings?: {
     synthesis?: {
@@ -164,6 +178,8 @@ export class LocalCruxHarnessProvider implements CruxProvider {
     const synthesis = harnessBundle.eval_report?.council?.synthesis;
     const status = toTrustStatus(synthesis?.status);
     const agentSummary = summarizeAgents(harnessBundle.agent_findings);
+    const sourceWorkspace = summarizeSourceWorkspace(harnessBundle);
+    const readiness = summarizeReadiness(status, synthesis?.blocking_failures ?? [], agentSummary, sourceWorkspace);
     const question =
       harnessBundle.question_spec?.question ??
       harnessBundle.run_config?.input?.question ??
@@ -179,12 +195,15 @@ export class LocalCruxHarnessProvider implements CruxProvider {
       answerability: stringField(intake, "answerability") ?? "unknown",
       risk: stringField(intake, "risk_level") ?? "unknown",
       createdAt: createdAtFromRunId(runId),
+      harnessVersion: harnessBundle.run_config?.harness_version,
       trust: {
         status,
         confidence: Number(synthesis?.confidence ?? 0),
         blockingIssues: synthesis?.blocking_failures ?? [],
       },
+      readiness,
       agents: agentSummary,
+      sourceWorkspace,
       paths: {
         generatedInput: extras.generatedInputPath
           ? path.relative(this.projectRoot, extras.generatedInputPath)
@@ -205,9 +224,12 @@ export class LocalCruxHarnessProvider implements CruxProvider {
         evidence: harnessBundle.evidence,
         contradictions: harnessBundle.contradictions,
         uncertainty: harnessBundle.uncertainty,
+        sourceInventory: harnessBundle.source_inventory,
+        sourceChunks: harnessBundle.source_chunks,
         agentManifest: harnessBundle.agent_manifest,
         agents: harnessBundle.agent_findings,
         council: harnessBundle.eval_report?.council,
+        evalReport: harnessBundle.eval_report,
         diagnostics: harnessBundle.eval_report?.diagnostics,
         trace: harnessBundle.trace,
       },
@@ -275,6 +297,59 @@ function summarizeAgents(agentFindings: HarnessArtifactBundle["agent_findings"])
   };
 }
 
+function summarizeSourceWorkspace(bundle: HarnessArtifactBundle): SourceWorkspaceSummary {
+  const sourceInventory = asRecord(bundle.source_inventory);
+  const sourceChunks = asRecord(bundle.source_chunks);
+  const sources = Array.isArray(sourceInventory.sources) ? sourceInventory.sources : [];
+  const chunks = Array.isArray(sourceChunks.chunks) ? sourceChunks.chunks : [];
+  const missingEvidence = bundle.contradictions?.missing_evidence ?? [];
+
+  return {
+    sourceCount: bundle.summary?.source_count ?? sources.length,
+    sourceChunkCount: bundle.summary?.source_chunk_count ?? chunks.length,
+    missingEvidence,
+    ...(bundle.run_config?.source_pack ? { sourcePackName: path.basename(bundle.run_config.source_pack) } : {}),
+  };
+}
+
+function summarizeReadiness(
+  trustStatus: TrustStatus,
+  trustBlockers: string[],
+  agents: AgentSummary | undefined,
+  sources: SourceWorkspaceSummary,
+): ReadinessSummary {
+  const blockerCount = trustBlockers.length + (agents?.blockingIssues.length ?? 0);
+  const nextAction = agents?.nextActions[0] ?? sources.missingEvidence[0] ?? trustBlockers[0];
+
+  if (trustStatus === "fail" || (agents?.status === "fail") || blockerCount > 0) {
+    return {
+      status: "blocked",
+      label: "Blocked",
+      reason: "Trust, agent, or source blockers must be resolved before this run is used operationally.",
+      blockerCount,
+      ...(nextAction ? { nextAction } : {}),
+    };
+  }
+
+  if (trustStatus === "warn" || (agents?.status === "warn") || sources.missingEvidence.length > 0) {
+    return {
+      status: "usable_with_warnings",
+      label: "Usable with warnings",
+      reason: "The run is inspectable, but warnings or missing evidence still need review.",
+      blockerCount,
+      ...(nextAction ? { nextAction } : {}),
+    };
+  }
+
+  return {
+    status: "ready",
+    label: "Ready for review",
+    reason: "Trust gate, bounded agents, and source checks do not report blockers.",
+    blockerCount,
+    nextAction: "Review claims and export the memo when approved.",
+  };
+}
+
 function formatSourcePackContext(sourcePack: AskInput["sourcePack"]) {
   if (!sourcePack) {
     return undefined;
@@ -290,6 +365,12 @@ function formatSourcePackContext(sourcePack: AskInput["sourcePack"]) {
 function stringField(source: Record<string, unknown>, field: string): string | undefined {
   const value = source[field];
   return typeof value === "string" ? value : undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function createdAtFromRunId(runId: string): string {

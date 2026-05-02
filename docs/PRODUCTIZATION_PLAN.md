@@ -220,3 +220,19 @@ The first implementation slice is Phase 2 plus the first part of Phase 3:
 - show bounded-agent synthesis in the right inspector
 - keep mock and local providers contract-compatible through tests
 
+## Local-First Implementation Status
+
+Implemented in Studio v0.4:
+
+- Phase 1: canonical demo questions are exposed through `/api/demos` and the ask panel.
+- Phase 2: the provider boundary carries readiness, Harness version, source summaries, bounded agents, source inventory, source chunks, and eval reports.
+- Phase 3: Studio shows readiness, bounded-agent synthesis, source state, agent findings, and source artifacts as first-class trust surfaces.
+- Phase 4: source packs are createable from the UI, source inventories and chunks are inspectable, and missing evidence is surfaced.
+- Phase 5: reviewed memo export remains available and decision package export now combines readiness, trust, agents, sources, review, and memo content.
+- Phase 6: compare now includes readiness, trust, agent, source, and run identity movement.
+- Phase 7: `pnpm dev:local`, `pnpm smoke:local`, `pnpm verify`, and `docs/DEMO_GUIDE.md` make the product easier to run and share.
+- Phase 8: artifact access remains whitelisted and the local smoke check verifies server health, web response, provider registry, demos, run indexing, and agent-aware run availability.
+
+Still deferred:
+
+- hosted auth, teams, permissions, hosted database, object storage, background jobs, deployment observability, and hosted audit logs.

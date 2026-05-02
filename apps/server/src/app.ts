@@ -60,9 +60,12 @@ const artifactNames = [
   "evidence",
   "contradictions",
   "uncertainty",
+  "source-inventory",
+  "source-chunks",
   "agent-manifest",
   "agents",
   "council",
+  "eval-report",
   "diagnostics",
   "trace",
 ] as const;
@@ -70,6 +73,49 @@ const artifactNames = [
 type ArtifactName = (typeof artifactNames)[number];
 
 const artifactNameSet = new Set<string>(artifactNames);
+
+const demoQuestions = [
+  {
+    id: "investment-allocation",
+    title: "Diversified portfolio allocation",
+    question: "How should I invest 10000 USD into a diversified portfolio?",
+    context: "I want a practical long-term allocation and I want risks and assumptions made explicit.",
+    timeHorizon: "5 years",
+    sourcePolicy: "offline",
+  },
+  {
+    id: "product-roadmap",
+    title: "Product roadmap priority",
+    question: "Which product bet should our team prioritize this quarter?",
+    context: "We have one engineering squad and need to balance retention, activation, and enterprise requests.",
+    timeHorizon: "90 days",
+    sourcePolicy: "hybrid",
+  },
+  {
+    id: "support-response-time",
+    title: "Support response time",
+    question: "How should a support team reduce first-response time without hiring more agents this month?",
+    context: "The team can change triage, macros, routing, and coverage but cannot add headcount.",
+    timeHorizon: "30 days",
+    sourcePolicy: "hybrid",
+  },
+  {
+    id: "market-entry",
+    title: "Market entry decision",
+    question: "Should we enter the German mid-market segment this year?",
+    context: "We need to compare revenue upside, sales motion risk, localization cost, and competitive pressure.",
+    timeHorizon: "12 months",
+    sourcePolicy: "hybrid",
+  },
+  {
+    id: "architecture-choice",
+    title: "Architecture tradeoff",
+    question: "Should we keep a modular monolith or split this product into services now?",
+    context: "The team is small, release velocity matters, and observability maturity is limited.",
+    timeHorizon: "6 months",
+    sourcePolicy: "offline",
+  },
+] as const;
 
 export function buildServer({
   provider,
@@ -96,11 +142,15 @@ export function buildServer({
           "replay",
           "compare",
           "agents",
+          "demos",
+          "readiness",
           "export",
         ],
       },
     ],
   }));
+
+  app.get("/api/demos", async () => ({ demos: demoQuestions }));
 
   app.post("/api/projects", async (request, reply) => {
     const parsed = projectSchema.safeParse(request.body);
@@ -299,6 +349,25 @@ export function buildServer({
     },
   );
 
+  app.get<{ Params: { runId: string } }>(
+    "/api/runs/:runId/export/decision-package",
+    async (request, reply) => {
+      try {
+        const bundle = await provider.getRun(request.params.runId);
+        const review = await store.getReview(request.params.runId);
+        return reply
+          .type("text/markdown; charset=utf-8")
+          .header(
+            "content-disposition",
+            `attachment; filename="${bundle.runId}-decision-package.md"`,
+          )
+          .send(renderDecisionPackage(bundle, review));
+      } catch {
+        return reply.code(404).send({ message: "Run not found." });
+      }
+    },
+  );
+
   app.post<{ Params: { runId: string } }>(
     "/api/runs/:runId/replay",
     async (request, reply) => {
@@ -391,10 +460,61 @@ Evidence annotations: ${
 ${memo}`;
 }
 
+function renderDecisionPackage(
+  bundle: Awaited<ReturnType<CruxProvider["getRun"]>>,
+  review: Awaited<ReturnType<StudioStore["getReview"]>>,
+): string {
+  const agentNextAction = bundle.agents?.nextActions[0] ?? "none";
+  const missingEvidence = bundle.sourceWorkspace?.missingEvidence.join(", ") || "none";
+
+  return `# Crux Decision Package
+
+Run: ${bundle.runId}
+Question: ${bundle.question}
+Readiness: ${bundle.readiness.label}
+Trust: ${bundle.trust.status} (${bundle.trust.confidence})
+Agents: ${bundle.agents?.status ?? "unknown"} (${bundle.agents?.agentCount ?? 0} agents)
+Sources: ${bundle.sourceWorkspace?.sourceCount ?? 0} sources, ${bundle.sourceWorkspace?.sourceChunkCount ?? 0} chunks
+
+## Readiness
+
+${bundle.readiness.reason}
+
+Next action: ${bundle.readiness.nextAction ?? agentNextAction}
+
+## Source Gaps
+
+${missingEvidence}
+
+## Agent Next Action
+
+${agentNextAction}
+
+## Human Review Summary
+
+Approved claims: ${review.summary.approvedClaims.join(", ") || "none"}
+Rejected claims: ${review.summary.rejectedClaims.join(", ") || "none"}
+Evidence annotations: ${
+    review.summary.evidenceAnnotations
+      .map((item) => `${item.evidenceId} (${item.noteCount})`)
+      .join(", ") || "none"
+  }
+
+## Decision Memo
+
+${bundle.memo}`;
+}
+
 function compareRunBundles(left: RunLike, right: RunLike) {
   const differences = [
+    ...compareValue("runId", left.runId, right.runId),
     ...compareValue("question", left.question, right.question),
+    ...compareValue("readiness.status", left.readiness.status, right.readiness.status),
     ...compareValue("trust.status", left.trust.status, right.trust.status),
+    ...compareValue("agents.status", left.agents?.status, right.agents?.status),
+    ...compareValue("agents.agentCount", left.agents?.agentCount, right.agents?.agentCount),
+    ...compareValue("sourceWorkspace.sourceCount", left.sourceWorkspace?.sourceCount, right.sourceWorkspace?.sourceCount),
+    ...compareValue("sourceWorkspace.missingEvidence", left.sourceWorkspace?.missingEvidence, right.sourceWorkspace?.missingEvidence),
     ...compareValue("answerability", left.answerability, right.answerability),
     ...compareValue("risk", left.risk, right.risk),
     ...compareValue(
@@ -413,6 +533,8 @@ function compareRunBundles(left: RunLike, right: RunLike) {
       differenceCount: differences.length,
       leftTrust: left.trust.status,
       rightTrust: right.trust.status,
+      leftReadiness: left.readiness.status,
+      rightReadiness: right.readiness.status,
     },
   };
 }
@@ -442,12 +564,18 @@ function selectArtifact(
       return bundle.artifacts.contradictions;
     case "uncertainty":
       return bundle.artifacts.uncertainty;
+    case "source-inventory":
+      return bundle.artifacts.sourceInventory;
+    case "source-chunks":
+      return bundle.artifacts.sourceChunks;
     case "agent-manifest":
       return bundle.artifacts.agentManifest;
     case "agents":
       return bundle.artifacts.agents;
     case "council":
       return bundle.artifacts.council;
+    case "eval-report":
+      return bundle.artifacts.evalReport;
     case "diagnostics":
       return bundle.artifacts.diagnostics;
     case "trace":

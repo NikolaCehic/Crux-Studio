@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0 - 2026-05-02
+
+- Implemented the remaining local-first productization plan surfaces across Studio.
+- Added canonical demo questions through `/api/demos` and the ask panel.
+- Added run readiness summaries with `ready`, `usable_with_warnings`, and `blocked` states.
+- Added source workspace summaries, source inventory/chunk artifacts, and a Sources tab.
+- Added decision package export with readiness, trust, agents, sources, review, and memo content.
+- Expanded run comparison to include readiness, agent, source, and run identity movement.
+- Added `docs/DEMO_GUIDE.md`, `pnpm dev:local`, `pnpm smoke:local`, and `pnpm verify`.
+- Added local smoke verification for server health, web response, provider registry, demos, run indexing, and agent-aware runs.
+
 ## 0.3.0 - 2026-05-02
 
 - Added `docs/PRODUCTIZATION_PLAN.md` with a Harness plus Studio productization roadmap.

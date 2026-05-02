@@ -39,6 +39,15 @@ export type ProviderRegistry = {
   }>;
 };
 
+export type DemoQuestion = {
+  id: string;
+  title: string;
+  question: string;
+  context: string;
+  timeHorizon: string;
+  sourcePolicy: "offline" | "hybrid" | "web";
+};
+
 export async function askCrux(input: AskInput): Promise<RunSummary> {
   const response = await fetch("/api/runs/ask", {
     method: "POST",
@@ -77,6 +86,11 @@ export async function createSourcePack(input: {
 
 export async function listProviders(): Promise<ProviderRegistry> {
   return getJson("/api/providers", "Provider registry failed to load.");
+}
+
+export async function listDemos(): Promise<DemoQuestion[]> {
+  const result = await getJson<{ demos: DemoQuestion[] }>("/api/demos", "Demo questions failed to load.");
+  return result.demos;
 }
 
 export async function reviewClaim(

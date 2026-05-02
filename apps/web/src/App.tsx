@@ -26,6 +26,7 @@ import {
   RotateCcw,
   SearchCheck,
   ShieldCheck,
+  Sparkles,
   SquareActivity,
   X,
 } from "lucide-react";
@@ -58,6 +59,7 @@ import {
   createProject,
   createSourcePack,
   getRun,
+  listDemos,
   listProjects,
   listProviders,
   listRuns,
@@ -65,6 +67,7 @@ import {
   replayRun,
   reviewClaim,
   type ProviderRegistry,
+  type DemoQuestion,
   type RunComparison,
   type StudioProject,
   type StudioReview,
@@ -83,6 +86,7 @@ type ArtifactTab =
   | "Memo"
   | "Claims"
   | "Evidence"
+  | "Sources"
   | "Contradictions"
   | "Uncertainty"
   | "Agents"
@@ -94,6 +98,7 @@ const artifactTabs: ArtifactTab[] = [
   "Memo",
   "Claims",
   "Evidence",
+  "Sources",
   "Contradictions",
   "Uncertainty",
   "Agents",
@@ -132,6 +137,7 @@ export function App() {
   const [projects, setProjects] = useState<StudioProject[]>([]);
   const [sourcePacks, setSourcePacks] = useState<StudioSourcePack[]>([]);
   const [providers, setProviders] = useState<ProviderRegistry["providers"]>([]);
+  const [demos, setDemos] = useState<DemoQuestion[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedSourcePackId, setSelectedSourcePackId] = useState("");
   const [sourcePackName, setSourcePackName] = useState("Wholesale intake notes");
@@ -170,13 +176,15 @@ export function App() {
       listProjects(),
       listSourcePacks(),
       listProviders(),
+      listDemos(),
     ])
-      .then(([history, loadedProjects, loadedSourcePacks, registry]) => {
+      .then(([history, loadedProjects, loadedSourcePacks, registry, loadedDemos]) => {
         if (!cancelled) {
           setRuns(history);
           setProjects(loadedProjects);
           setSourcePacks(loadedSourcePacks);
           setProviders(registry.providers);
+          setDemos(loadedDemos);
           setSelectedProjectId(loadedProjects[0]?.id ?? "");
           setSelectedSourcePackId(
             loadedSourcePacks.find(
@@ -259,6 +267,16 @@ export function App() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Project creation failed.");
     }
+  }
+
+  function handleUseDemo(demo: DemoQuestion) {
+    setForm({
+      question: demo.question,
+      context: demo.context,
+      timeHorizon: demo.timeHorizon,
+      sourcePolicy: demo.sourcePolicy,
+    });
+    setError(null);
   }
 
   function handleSelectProject(projectId: string) {
@@ -376,7 +394,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.3 · workspace
+              v0.4 · workspace
             </p>
           </div>
         </div>
@@ -549,6 +567,7 @@ export function App() {
         <section className="grid gap-6 p-4 xl:grid-cols-[minmax(300px,390px)_minmax(0,1fr)] xl:p-8" id="ask">
           <RunForm
             canRun={canRun}
+            demos={demos}
             error={error}
             form={form}
             isRunning={isRunning}
@@ -564,6 +583,7 @@ export function App() {
             onSetSourcePackName={setSourcePackName}
             onSetSourcePackId={setSelectedSourcePackId}
             onSubmit={handleSubmit}
+            onUseDemo={handleUseDemo}
           />
 
           <MemoPanel
@@ -587,6 +607,10 @@ export function App() {
         aria-label="Run inspector"
         className="grid gap-4 border-t bg-sidebar p-4 text-sidebar-foreground lg:sticky lg:top-0 lg:h-svh lg:overflow-y-auto lg:border-l lg:border-t-0"
       >
+        <InspectorCard label="Readiness">
+          <ReadinessCard run={selectedRun} />
+        </InspectorCard>
+
         <InspectorCard label="Trust">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold tracking-tight">Trust gate</h2>
@@ -627,6 +651,10 @@ export function App() {
           <AgentSummaryCard agents={selectedRun?.agents} />
         </InspectorCard>
 
+        <InspectorCard label="Sources">
+          <SourceWorkspaceCard sourceWorkspace={selectedRun?.sourceWorkspace} />
+        </InspectorCard>
+
         <InspectorCard id="artifacts" label="Artifacts">
           <FactList
             mono
@@ -648,6 +676,12 @@ export function App() {
                 <a href={`/api/runs/${selectedRun.runId}/artifacts/evidence`}>
                   <FileJson className="size-3.5" />
                   Evidence JSON
+                </a>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <a href={`/api/runs/${selectedRun.runId}/artifacts/source-inventory`}>
+                  <FileJson className="size-3.5" />
+                  Sources JSON
                 </a>
               </Button>
               <Button asChild size="sm" variant="outline">
@@ -676,6 +710,7 @@ export function App() {
 
 function RunForm({
   canRun,
+  demos,
   error,
   form,
   isRunning,
@@ -691,8 +726,10 @@ function RunForm({
   onSetSourcePackId,
   onSetSourcePackName,
   onSubmit,
+  onUseDemo,
 }: {
   canRun: boolean;
+  demos: DemoQuestion[];
   error: string | null;
   form: AskFormState;
   isRunning: boolean;
@@ -708,6 +745,7 @@ function RunForm({
   onSetSourcePackId: (value: string) => void;
   onSetSourcePackName: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onUseDemo: (demo: DemoQuestion) => void;
 }) {
   return (
     <form className="self-start" onSubmit={onSubmit}>
@@ -722,6 +760,28 @@ function RunForm({
         </CardHeader>
         <CardContent>
           <FieldGroup>
+            {demos.length ? (
+              <div className="grid gap-2 rounded-lg border bg-muted/25 p-3" aria-label="Demo questions">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Sparkles className="size-4 text-primary" />
+                  Demo spine
+                </div>
+                <div className="grid gap-2">
+                  {demos.slice(0, 5).map((demo) => (
+                    <Button
+                      className="h-auto justify-start whitespace-normal px-3 py-2 text-left"
+                      key={demo.id}
+                      type="button"
+                      variant="outline"
+                      onClick={() => onUseDemo(demo)}
+                    >
+                      {demo.title}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             <Field>
               <FieldLabel htmlFor="question">Question</FieldLabel>
               <Textarea
@@ -893,6 +953,12 @@ function MemoPanel({
                 Export memo
               </a>
             </Button>
+            <Button asChild size="sm" variant="outline">
+              <a href={`/api/runs/${selectedRun.runId}/export/decision-package`}>
+                <Download className="size-3.5" />
+                Decision package
+              </a>
+            </Button>
             <Button size="sm" type="button" variant="outline" onClick={onReplay}>
               <RotateCcw className="size-3.5" />
               Replay run
@@ -1000,6 +1066,8 @@ function renderArtifactTab(
       return renderClaims(bundle.artifacts.claims, onReviewClaim);
     case "Evidence":
       return renderEvidence(bundle.artifacts.evidence, onAnnotateEvidence);
+    case "Sources":
+      return renderSources(bundle);
     case "Diagnostics":
       return renderDiagnostics(bundle.artifacts.diagnostics);
     case "Trace":
@@ -1039,6 +1107,64 @@ function AgentSummaryCard({ agents }: { agents: RunSummary["agents"] | undefined
           <p>{agents.nextActions[0]}</p>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ReadinessCard({ run }: { run: RunBundle | RunSummary | null }) {
+  if (!run) {
+    return <p className="text-sm text-muted-foreground">Waiting for the first run.</p>;
+  }
+
+  return (
+    <div className="grid gap-3 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold tracking-tight">{run.readiness.label}</h2>
+        <ReadinessBadge status={run.readiness.status} />
+      </div>
+      <p className="text-muted-foreground">{run.readiness.reason}</p>
+      <FactList
+        items={[
+          { label: "Blockers", value: String(run.readiness.blockerCount) },
+          { label: "Harness", value: run.harnessVersion ?? "provider" },
+        ]}
+      />
+      {run.readiness.nextAction ? (
+        <div className="grid gap-1.5">
+          <p className="font-medium text-muted-foreground">Next action</p>
+          <p>{run.readiness.nextAction}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SourceWorkspaceCard({ sourceWorkspace }: { sourceWorkspace: RunSummary["sourceWorkspace"] | undefined }) {
+  if (!sourceWorkspace) {
+    return <p className="text-sm text-muted-foreground">No source workspace summary available.</p>;
+  }
+
+  return (
+    <div className="grid gap-3 text-sm">
+      <FactList
+        items={[
+          { label: "Sources", value: String(sourceWorkspace.sourceCount) },
+          { label: "Chunks", value: String(sourceWorkspace.sourceChunkCount) },
+          { label: "Pack", value: sourceWorkspace.sourcePackName ?? "none" },
+        ]}
+      />
+      {sourceWorkspace.missingEvidence.length ? (
+        <div className="grid gap-1.5">
+          <p className="font-medium text-muted-foreground">Missing evidence</p>
+          <ul className="list-inside list-disc">
+            {sourceWorkspace.missingEvidence.slice(0, 3).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className="text-muted-foreground">No source gaps reported.</p>
+      )}
     </div>
   );
 }
@@ -1125,6 +1251,66 @@ function renderAgents(value: unknown) {
           );
         })}
       </ItemGroup>
+    </div>
+  );
+}
+
+function renderSources(bundle: RunBundle) {
+  const inventory = asRecord(bundle.artifacts.sourceInventory);
+  const chunksArtifact = asRecord(bundle.artifacts.sourceChunks);
+  const sources = Array.isArray(inventory.sources) ? inventory.sources : [];
+  const chunks = Array.isArray(chunksArtifact.chunks) ? chunksArtifact.chunks : [];
+  const missingEvidence = bundle.sourceWorkspace?.missingEvidence ?? [];
+
+  return (
+    <div className="grid gap-4">
+      <div className="rounded-lg border bg-muted/25 p-4 text-sm">
+        <h3 className="font-semibold">Source workspace</h3>
+        <FactList
+          items={[
+            { label: "Sources", value: String(bundle.sourceWorkspace?.sourceCount ?? sources.length) },
+            { label: "Chunks", value: String(bundle.sourceWorkspace?.sourceChunkCount ?? chunks.length) },
+            { label: "Source pack", value: bundle.sourceWorkspace?.sourcePackName ?? "none" },
+          ]}
+        />
+        {missingEvidence.length ? (
+          <div className="mt-3 grid gap-1">
+            <p className="font-medium">Missing evidence</p>
+            <ul className="list-inside list-disc">
+              {missingEvidence.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+
+      {sources.length ? (
+        <ItemGroup>
+          {sources.map((source, index) => {
+            const item = asRecord(source);
+            const id = stringField(item, "id") ?? `source-${index + 1}`;
+            const title = stringField(item, "title") ?? stringField(item, "path") ?? id;
+            const sourceChunkCount = chunks.filter((chunk) => {
+              return stringField(asRecord(chunk), "source_id") === id;
+            }).length;
+
+            return (
+              <Item key={id} variant="outline">
+                <ItemMediaIcon icon={FileText} />
+                <ItemContent>
+                  <ItemTitle className="line-clamp-none">{title}</ItemTitle>
+                  <ItemDescription className="font-mono">
+                    {id} · {sourceChunkCount} chunks
+                  </ItemDescription>
+                </ItemContent>
+              </Item>
+            );
+          })}
+        </ItemGroup>
+      ) : (
+        <JsonArtifact value={{ sourceInventory: bundle.artifacts.sourceInventory, sourceChunks: bundle.artifacts.sourceChunks }} />
+      )}
     </div>
   );
 }
@@ -1412,6 +1598,26 @@ function TrustBadge({ status }: { status: string }) {
   return (
     <Badge className={cn("shrink-0 uppercase", statusClasses[status] ?? statusClasses.pending)} variant="outline">
       {status}
+    </Badge>
+  );
+}
+
+function ReadinessBadge({ status }: { status: string }) {
+  const statusClasses: Record<string, string> = {
+    ready: "border-emerald-300 bg-emerald-100 text-emerald-900",
+    usable_with_warnings: "border-amber-300 bg-amber-100 text-amber-950",
+    blocked: "border-red-300 bg-red-100 text-red-900",
+  };
+
+  const labels: Record<string, string> = {
+    ready: "ready",
+    usable_with_warnings: "warnings",
+    blocked: "blocked",
+  };
+
+  return (
+    <Badge className={cn("shrink-0 uppercase", statusClasses[status] ?? "border-border bg-muted text-muted-foreground")} variant="outline">
+      {labels[status] ?? status}
     </Badge>
   );
 }

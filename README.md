@@ -63,11 +63,11 @@ Ask a question
 -> Add context and source material
 -> Run Crux
 -> Read the decision memo
--> Inspect claims, evidence, uncertainty, bounded agents, diagnostics, council output, and trace
+-> Inspect claims, evidence, sources, uncertainty, bounded agents, diagnostics, council output, and trace
 -> Review claims and annotate evidence
 -> Replay with better inputs
 -> Compare runs
--> Export a reviewed memo
+-> Export a decision package
 ```
 
 ## Product Tour
@@ -105,14 +105,17 @@ Studio supports replaying a run with the same question and context, comparing th
 - Attach source packs to runs.
 - Preserve source content through the provider boundary.
 - Reopen the latest run automatically when returning to the workspace.
-- Inspect the memo, claims, evidence, contradictions, uncertainty, bounded agents, council output, diagnostics, and trace.
+- Start from canonical demo questions.
+- Inspect the memo, claims, evidence, sources, contradictions, uncertainty, bounded agents, council output, diagnostics, and trace.
+- See run readiness as ready, usable with warnings, or blocked.
 - Review claims with approve and reject actions.
 - Annotate evidence.
 - Replay runs with the same context.
-- Compare recent runs and see what changed.
+- Compare recent runs and see readiness, trust, agent, and source changes.
 - Open raw Claims, Evidence, Agents, and Trace JSON.
 - Export the memo as Markdown.
 - Export a reviewed memo that includes human review state.
+- Export a full decision package with readiness, trust, agents, sources, review, and memo content.
 
 ## Run It
 
@@ -126,6 +129,12 @@ Start Studio:
 
 ```bash
 pnpm dev
+```
+
+Start against a local Crux Harness checkout:
+
+```bash
+pnpm dev:local
 ```
 
 Open:
@@ -222,6 +231,18 @@ Build the project:
 pnpm build
 ```
 
+Run the full verification gate:
+
+```bash
+pnpm verify
+```
+
+Smoke check a running local Studio:
+
+```bash
+pnpm smoke:local
+```
+
 The project is developed with a TDD-first workflow. Product behavior is covered across the provider package, server API, and web app.
 
 ## Current Boundary
@@ -237,6 +258,7 @@ It is intentionally not a hosted team control plane yet. Authentication, teams, 
 - [Architecture spec](docs/ARCHITECTURE_SPEC.md)
 - [Phased plan](docs/PHASED_PLAN.md)
 - [Productization plan](docs/PRODUCTIZATION_PLAN.md)
+- [Demo guide](docs/DEMO_GUIDE.md)
 - [Trace log](docs/TRACE_LOG.md)
 - [Changelog](CHANGELOG.md)
 - [Product context](PRODUCT.md)

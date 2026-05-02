@@ -53,6 +53,17 @@ describe("Studio product workflow API", () => {
     const sourcePack = sourceResponse.json();
     expect(sourcePack.sourceCount).toBe(2);
 
+    const demos = await app.inject({ method: "GET", url: "/api/demos" });
+    expect(demos.statusCode).toBe(200);
+    expect(demos.json().demos).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "support-response-time",
+          question: expect.stringContaining("first-response time"),
+        }),
+      ]),
+    );
+
     const createdRunResponse = await app.inject({
       method: "POST",
       url: "/api/runs/ask",
@@ -67,6 +78,7 @@ describe("Studio product workflow API", () => {
     expect(createdRunResponse.statusCode).toBe(201);
     const run = createdRunResponse.json();
     expect(run.trust.status).toBe("pass");
+    expect(run.readiness.status).toBe("ready");
     expect(run.projectId).toBe(project.id);
     expect(run.sourcePackId).toBe(sourcePack.id);
 
@@ -85,6 +97,16 @@ describe("Studio product workflow API", () => {
       ]),
     );
     expect(bundle.artifacts.evidence.evidence[0].sourceType).toBe("source_pack");
+    expect(bundle.sourceWorkspace.sourceCount).toBe(2);
+    expect(bundle.artifacts.sourceInventory.sources).toHaveLength(2);
+    expect(bundle.artifacts.sourceChunks.chunks).toHaveLength(2);
+
+    const sourceInventory = await app.inject({
+      method: "GET",
+      url: `/api/runs/${run.runId}/artifacts/source-inventory`,
+    });
+    expect(sourceInventory.statusCode).toBe(200);
+    expect(sourceInventory.json().sources).toHaveLength(2);
 
     const reviewResponse = await app.inject({
       method: "POST",
@@ -121,6 +143,15 @@ describe("Studio product workflow API", () => {
     expect(reviewedMemo.body).toContain("Human Review Summary");
     expect(reviewedMemo.body).toContain("claim-1");
 
+    const decisionPackage = await app.inject({
+      method: "GET",
+      url: `/api/runs/${run.runId}/export/decision-package`,
+    });
+    expect(decisionPackage.statusCode).toBe(200);
+    expect(decisionPackage.body).toContain("Crux Decision Package");
+    expect(decisionPackage.body).toContain("Readiness: Ready for review");
+    expect(decisionPackage.body).toContain("Agents: pass");
+
     const replayResponse = await app.inject({
       method: "POST",
       url: `/api/runs/${run.runId}/replay`,
@@ -140,7 +171,14 @@ describe("Studio product workflow API", () => {
         leftRunId: run.runId,
         rightRunId: replayed.runId,
         trustMovement: expect.any(Number),
+        summary: expect.objectContaining({
+          leftReadiness: "ready",
+          rightReadiness: "ready",
+        }),
       }),
+    );
+    expect(compareResponse.json().differences.map((difference: { path: string }) => difference.path)).toEqual(
+      expect.arrayContaining(["runId"]),
     );
 
     const projectRuns = await app.inject({
@@ -159,7 +197,7 @@ describe("Studio product workflow API", () => {
         expect.objectContaining({
           id: "mock",
           status: "active",
-          capabilities: expect.arrayContaining(["ask", "inspect", "review", "compare"]),
+          capabilities: expect.arrayContaining(["ask", "inspect", "review", "compare", "demos", "readiness"]),
         }),
       ]),
     );

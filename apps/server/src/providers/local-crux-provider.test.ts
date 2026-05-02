@@ -27,6 +27,10 @@ describe("LocalCruxHarnessProvider", () => {
         async loadRunArtifactBundle() {
           return {
             run_dir: "runs/20260501T100000Z-support",
+            run_config: {
+              harness_version: "1.12.1",
+              source_pack: "source-packs/support-notes",
+            },
             question_spec: {
               question: "How should support reduce first-response time?",
             },
@@ -44,8 +48,14 @@ describe("LocalCruxHarnessProvider", () => {
             },
             claims: { claims: [] },
             evidence: { evidence: [] },
-            contradictions: { contradictions: [] },
+            contradictions: {
+              contradictions: [],
+              missing_evidence: ["Current queue baseline"],
+            },
             uncertainty: { confidence: 0.55 },
+            source_inventory: { sources: [{ id: "S1", title: "Support notes" }] },
+            source_chunks: { chunks: [{ id: "CH1", source_id: "S1" }] },
+            summary: { source_count: 1, source_chunk_count: 1 },
             agent_manifest: {
               mode: "bounded",
               agents: [
@@ -135,6 +145,7 @@ describe("LocalCruxHarnessProvider", () => {
         runId: "20260501T100000Z-support",
         runDir: "runs/20260501T100000Z-support",
         question: "How should support reduce first-response time?",
+        harnessVersion: "1.12.1",
         trust: {
           status: "fail",
           confidence: 0.55,
@@ -155,6 +166,19 @@ describe("LocalCruxHarnessProvider", () => {
           blockingIssues: ["Research Scout: source coverage is thin."],
           nextActions: ["Attach one more source pack and rerun."],
         },
+        readiness: {
+          status: "blocked",
+          label: "Blocked",
+          reason: "Trust, agent, or source blockers must be resolved before this run is used operationally.",
+          blockerCount: 2,
+          nextAction: "Attach one more source pack and rerun.",
+        },
+        sourceWorkspace: {
+          sourceCount: 1,
+          sourceChunkCount: 1,
+          missingEvidence: ["Current queue baseline"],
+          sourcePackName: "support-notes",
+        },
       }),
     );
 
@@ -165,6 +189,11 @@ describe("LocalCruxHarnessProvider", () => {
           agentManifest: expect.objectContaining({ mode: "bounded" }),
           agents: expect.objectContaining({
             synthesis: expect.objectContaining({ status: "warn" }),
+          }),
+          sourceInventory: { sources: [{ id: "S1", title: "Support notes" }] },
+          sourceChunks: { chunks: [{ id: "CH1", source_id: "S1" }] },
+          evalReport: expect.objectContaining({
+            council: expect.any(Object),
           }),
           claims: { claims: [] },
           evidence: { evidence: [] },
