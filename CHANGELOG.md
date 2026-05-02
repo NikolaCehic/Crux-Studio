@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.0 - 2026-05-02
+
+- Added durable lifecycle persistence in the Studio store for every run-job transition.
+- Recovered queued jobs after local server restart so unstarted work can continue.
+- Marked interrupted running jobs as failed with a retryable restart message instead of losing them.
+- Preserved completed, failed, cancelled, and retry-created jobs across Studio server restarts.
+- Added server restart coverage for lifecycle persistence and recovery.
+- Updated Studio lifecycle action rows to explain recovered retryable failures.
+- Expanded local smoke to assert completed lifecycle jobs remain inspectable in durable job history.
+- Added the Phase 12 durable lifecycle recovery spec artifact.
+
 ## 0.8.0 - 2026-05-02
 
 - Added an async run lifecycle API with queued, running, completed, failed, cancelled, and retry states.

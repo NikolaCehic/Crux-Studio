@@ -1,5 +1,44 @@
 # Trace Log
 
+## 2026-05-02T20:18:00+02:00 - Phase 12 Durable Lifecycle Recovery
+
+Intent:
+
+- Implement the next productization phase under the required phase contract: full implementation, E2E/smoke tests, spec validation, artifacts, and next-phase handoff.
+- Make lifecycle jobs durable across local Studio server restarts.
+
+Implemented:
+
+- Added `runJobs` to the Studio store state.
+- Added store methods for saving, listing, and fetching lifecycle jobs.
+- Added state normalization so older `.studio/studio-state.json` files load without a `runJobs` key.
+- Persisted every lifecycle transition from queued to terminal states.
+- Recovered persisted job history when the server starts.
+- Resumed queued jobs after restart.
+- Marked interrupted running jobs as failed and retryable after restart.
+- Preserved retry-created and completed jobs across a second restart.
+- Updated Studio lifecycle rows to show recovered failure notes.
+- Expanded local smoke to assert completed lifecycle jobs remain durably inspectable in job history.
+- Added `docs/PHASE_12_DURABLE_LIFECYCLE_RECOVERY_SPEC.md`.
+
+Verification:
+
+- Failing server restart-recovery expectations were written first and passed after implementation.
+- Focused server lifecycle recovery test passed: `pnpm --filter @crux-studio/server test -- src/app.test.ts`.
+- Focused web lifecycle UX test passed: `pnpm --filter @crux-studio/web test -- src/App.test.tsx`.
+- Server typecheck passed: `pnpm --filter @crux-studio/server check`.
+- Full Studio verification passed: `pnpm verify`.
+- Local lifecycle smoke passed: `pnpm smoke:local`.
+- Final smoke job: `job-20260502182035-2bdcd33e`.
+- Final smoke run: `20260502T182035Z-how-should-a-support-team-reduce-first-response-`.
+- Final smoke result: `succeeded`, with durable job status `succeeded`, 2 sources, and 4 source chunks.
+- Refreshed README workbench screenshot: `docs/assets/crux-studio-workbench.png`.
+
+Result:
+
+- Phase 12 is done.
+- Next phase: Phase 13 Evidence Gap Closure Loop.
+
 ## 2026-05-02T19:34:32+02:00 - Phase 11 Async Run Lifecycle
 
 Intent:

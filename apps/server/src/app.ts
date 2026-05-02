@@ -7,7 +7,12 @@ import type {
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import { z } from "zod";
-import { createMemoryStudioStore, type StudioStore } from "./studio-store";
+import {
+  createMemoryStudioStore,
+  type StudioRunJob,
+  type StudioRunJobStatus,
+  type StudioStore,
+} from "./studio-store";
 
 const askSchema = z.object({
   question: z.string(),
@@ -68,20 +73,8 @@ type StudioAskInput = {
   sourcePackId?: string;
 };
 
-type RunJobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-
-type RunJob = {
-  jobId: string;
-  status: RunJobStatus;
-  createdAt: string;
-  updatedAt: string;
-  startedAt?: string;
-  finishedAt?: string;
-  retryOf?: string;
-  input: StudioAskInput;
-  run?: RunSummary;
-  error?: string;
-};
+type RunJobStatus = StudioRunJobStatus;
+type RunJob = StudioRunJob;
 
 const artifactNames = [
   "memo",
@@ -156,6 +149,7 @@ export function buildServer({
   const runJobs = new Map<string, RunJob>();
   const runQueue: string[] = [];
   let queueIsDraining = false;
+  let recoveryPromise: Promise<void> | null = null;
 
   function now() {
     return new Date().toISOString();
@@ -212,7 +206,54 @@ export function buildServer({
     return enrichRun(run, await store.getRunLink(run.runId));
   }
 
-  function createRunJob(input: StudioAskInput, retryOf?: string): RunJob {
+  function enqueueRunJob(jobId: string) {
+    if (!runQueue.includes(jobId)) {
+      runQueue.push(jobId);
+    }
+    setTimeout(() => void drainRunQueue(), 0);
+  }
+
+  async function ensureRecoveredJobs() {
+    if (!recoveryPromise) {
+      recoveryPromise = recoverRunJobs();
+    }
+
+    await recoveryPromise;
+  }
+
+  async function recoverRunJobs() {
+    const durableJobs = await store.listRunJobs();
+    const queuedJobIds: string[] = [];
+
+    for (const durableJob of durableJobs) {
+      let job = durableJob;
+
+      if (job.status === "running") {
+        const finishedAt = now();
+        job = {
+          ...job,
+          status: "failed",
+          error: "Run job interrupted by a server restart before completion. Retry the job to run it again.",
+          finishedAt,
+          updatedAt: finishedAt,
+        };
+        await store.saveRunJob(job);
+      }
+
+      runJobs.set(job.jobId, job);
+      if (job.status === "queued") {
+        queuedJobIds.push(job.jobId);
+      }
+    }
+
+    for (const jobId of queuedJobIds) {
+      enqueueRunJob(jobId);
+    }
+  }
+
+  async function createRunJob(input: StudioAskInput, retryOf?: string): Promise<RunJob> {
+    await ensureRecoveredJobs();
+
     const createdAt = now();
     const job: RunJob = {
       jobId: `job-${createdAt.replace(/[^0-9]/g, "").slice(0, 14)}-${randomUUID().slice(0, 8)}`,
@@ -224,12 +265,14 @@ export function buildServer({
     };
 
     runJobs.set(job.jobId, job);
-    runQueue.push(job.jobId);
-    setTimeout(() => void drainRunQueue(), 0);
+    await store.saveRunJob(job);
+    enqueueRunJob(job.jobId);
     return job;
   }
 
   async function drainRunQueue() {
+    await ensureRecoveredJobs();
+
     if (queueIsDraining) {
       return;
     }
@@ -247,6 +290,7 @@ export function buildServer({
         job.status = "running";
         job.startedAt = startedAt;
         job.updatedAt = startedAt;
+        await store.saveRunJob(job);
 
         try {
           const providerRun = await askProvider(job.input);
@@ -257,6 +301,7 @@ export function buildServer({
             job.run = linkedRun;
             job.finishedAt = finishedAt;
             job.updatedAt = finishedAt;
+            await store.saveRunJob(job);
           }
         } catch (caught) {
           if (runJobs.get(job.jobId)?.status !== "cancelled") {
@@ -265,6 +310,7 @@ export function buildServer({
             job.error = caught instanceof Error ? caught.message : "Run job failed.";
             job.finishedAt = finishedAt;
             job.updatedAt = finishedAt;
+            await store.saveRunJob(job);
           }
         }
       }
@@ -273,11 +319,14 @@ export function buildServer({
     }
   }
 
-  function listRunJobs() {
+  async function listRunJobs() {
+    await ensureRecoveredJobs();
     return [...runJobs.values()].sort((left, right) =>
       right.createdAt.localeCompare(left.createdAt),
     );
   }
+
+  setTimeout(() => void ensureRecoveredJobs(), 0);
 
   app.get("/health", async () => ({
     ok: true,
@@ -314,12 +363,13 @@ export function buildServer({
       return reply.code(400).send({ message: "Question is required." });
     }
 
-    return reply.code(202).send(createRunJob(input));
+    return reply.code(202).send(await createRunJob(input));
   });
 
   app.get("/api/runs/jobs", async () => listRunJobs());
 
   app.get<{ Params: { jobId: string } }>("/api/runs/jobs/:jobId", async (request, reply) => {
+    await ensureRecoveredJobs();
     const job = runJobs.get(request.params.jobId);
     if (!job) {
       return reply.code(404).send({ message: "Run job not found." });
@@ -331,6 +381,7 @@ export function buildServer({
   app.post<{ Params: { jobId: string } }>(
     "/api/runs/jobs/:jobId/cancel",
     async (request, reply) => {
+      await ensureRecoveredJobs();
       const job = runJobs.get(request.params.jobId);
       if (!job) {
         return reply.code(404).send({ message: "Run job not found." });
@@ -349,6 +400,7 @@ export function buildServer({
           ? "Cancellation requested while the provider was running. The job result will be ignored."
           : "Run job cancelled before provider execution.";
 
+      await store.saveRunJob(job);
       return job;
     },
   );
@@ -356,6 +408,7 @@ export function buildServer({
   app.post<{ Params: { jobId: string } }>(
     "/api/runs/jobs/:jobId/retry",
     async (request, reply) => {
+      await ensureRecoveredJobs();
       const job = runJobs.get(request.params.jobId);
       if (!job) {
         return reply.code(404).send({ message: "Run job not found." });
@@ -365,7 +418,7 @@ export function buildServer({
         return reply.code(409).send({ message: "Only failed or cancelled jobs can be retried." });
       }
 
-      return reply.code(202).send(createRunJob(job.input, job.jobId));
+      return reply.code(202).send(await createRunJob(job.input, job.jobId));
     },
   );
 

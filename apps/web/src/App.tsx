@@ -506,7 +506,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.8 · workspace
+              v0.9 · workspace
             </p>
           </div>
         </div>
@@ -1189,6 +1189,9 @@ function RunLifecyclePanel({
                 <span className="line-clamp-1 text-sm">{item.input.question}</span>
                 <RunJobBadge status={item.status} />
               </div>
+              {item.error ? (
+                <p className="line-clamp-2 text-xs text-muted-foreground">{item.error}</p>
+              ) : null}
               <Button
                 className="justify-self-start"
                 size="sm"

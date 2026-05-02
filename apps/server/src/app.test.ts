@@ -1,15 +1,99 @@
 import { MockCruxProvider, type AskInput, type CruxProvider, type RunBundle, type RunSummary } from "@crux-studio/crux-provider";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildServer } from "./app";
+import { createFileStudioStore } from "./studio-store";
 
 const apps: Array<ReturnType<typeof buildServer>> = [];
+const tempDirs: string[] = [];
 
 afterEach(async () => {
   await Promise.all(apps.map((app) => app.close()));
   apps.length = 0;
+  await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
+  tempDirs.length = 0;
 });
 
 describe("Studio run API", () => {
+  it("persists lifecycle jobs and recovers queued and interrupted work after restart", async () => {
+    const stateDir = await mkdtemp(path.join(tmpdir(), "crux-studio-lifecycle-"));
+    tempDirs.push(stateDir);
+
+    const firstProvider = new DeferredCruxProvider();
+    const firstApp = buildServer({
+      provider: firstProvider,
+      store: createFileStudioStore(stateDir),
+    });
+    apps.push(firstApp);
+
+    const runningResponse = await firstApp.inject({
+      method: "POST",
+      url: "/api/runs/jobs",
+      payload: { question: "Should this interrupted job be retryable?", sourcePolicy: "offline" },
+    });
+    expect(runningResponse.statusCode).toBe(202);
+    const runningJob = runningResponse.json();
+    await waitForJob(firstApp, runningJob.jobId, "running");
+
+    const queuedResponse = await firstApp.inject({
+      method: "POST",
+      url: "/api/runs/jobs",
+      payload: { question: "Should queued work resume after restart?", sourcePolicy: "offline" },
+    });
+    expect(queuedResponse.statusCode).toBe(202);
+    const queuedJob = queuedResponse.json();
+    expect(queuedJob.status).toBe("queued");
+
+    await closeTrackedApp(firstApp);
+
+    const secondProvider = new DeferredCruxProvider();
+    const secondApp = buildServer({
+      provider: secondProvider,
+      store: createFileStudioStore(stateDir),
+    });
+    apps.push(secondApp);
+
+    const interruptedJob = await waitForJob(secondApp, runningJob.jobId, "failed");
+    expect(interruptedJob.error).toContain("server restart");
+
+    await waitForJob(secondApp, queuedJob.jobId, "running");
+    expect(secondProvider.pendingCount()).toBe(1);
+    await secondProvider.resolveNext();
+    await waitForJob(secondApp, queuedJob.jobId, "succeeded");
+
+    const retryResponse = await secondApp.inject({
+      method: "POST",
+      url: `/api/runs/jobs/${interruptedJob.jobId}/retry`,
+    });
+    expect(retryResponse.statusCode).toBe(202);
+    const retryJob = retryResponse.json();
+    expect(retryJob.retryOf).toBe(interruptedJob.jobId);
+
+    await waitForJob(secondApp, retryJob.jobId, "running");
+    await secondProvider.resolveNext();
+    await waitForJob(secondApp, retryJob.jobId, "succeeded");
+
+    await closeTrackedApp(secondApp);
+
+    const thirdApp = buildServer({
+      provider: new DeferredCruxProvider(),
+      store: createFileStudioStore(stateDir),
+    });
+    apps.push(thirdApp);
+
+    const listed = await thirdApp.inject({ method: "GET", url: "/api/runs/jobs" });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ jobId: runningJob.jobId, status: "failed" }),
+        expect.objectContaining({ jobId: queuedJob.jobId, status: "succeeded" }),
+        expect.objectContaining({ jobId: retryJob.jobId, status: "succeeded" }),
+      ]),
+    );
+  });
+
   it("tracks async run lifecycle jobs with queued, running, succeeded, cancelled, failed, and retry states", async () => {
     const provider = new DeferredCruxProvider();
     const app = buildServer({ provider });
@@ -301,4 +385,12 @@ async function waitForJob(
   }
 
   throw new Error(`Job ${jobId} did not reach ${status}.`);
+}
+
+async function closeTrackedApp(app: ReturnType<typeof buildServer>) {
+  await app.close();
+  const index = apps.indexOf(app);
+  if (index >= 0) {
+    apps.splice(index, 1);
+  }
 }

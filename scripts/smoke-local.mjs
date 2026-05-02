@@ -81,9 +81,17 @@ async function main() {
     sourcePolicy: "offline",
   });
   const completedSourceBackedJob = await waitForJob(sourceBackedJob.jobId);
+  const durableSourceBackedJob = await getJson(`${serverUrl}/api/runs/jobs/${sourceBackedJob.jobId}`);
+  const durableJobHistory = await getJson(`${serverUrl}/api/runs/jobs`);
   const sourceBackedRun = completedSourceBackedJob.run;
   if (!sourceBackedRun?.runId) {
     throw new Error(`Lifecycle job ${sourceBackedJob.jobId} did not return a run.`);
+  }
+  if (durableSourceBackedJob.status !== "succeeded") {
+    throw new Error(`Lifecycle job ${sourceBackedJob.jobId} was not durably inspectable after completion.`);
+  }
+  if (!durableJobHistory.some((job) => job.jobId === sourceBackedJob.jobId)) {
+    throw new Error(`Lifecycle job ${sourceBackedJob.jobId} was missing from durable job history.`);
   }
   const sourceBackedBundle = await getJson(`${serverUrl}/api/runs/${sourceBackedRun.runId}`);
   const sourceCount = sourceBackedBundle.sourceWorkspace?.sourceCount ?? 0;
@@ -110,6 +118,8 @@ async function main() {
       runId: sourceBackedRun.runId,
       jobId: sourceBackedJob.jobId,
       jobStatus: completedSourceBackedJob.status,
+      durableJobStatus: durableSourceBackedJob.status,
+      durableJobHistoryCount: durableJobHistory.length,
       readiness: sourceBackedRun.readiness?.status,
       sourceCount,
       sourceChunkCount,

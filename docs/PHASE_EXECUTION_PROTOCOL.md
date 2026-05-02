@@ -17,15 +17,16 @@ Every phase must complete these steps before it is considered done:
 - Phase 09: Source File Upload Workspace, implemented in Studio v0.6.
 - Phase 10: Answer-First Decision Brief, implemented in Studio v0.7.
 - Phase 11: Async Run Lifecycle, implemented in Studio v0.8.
+- Phase 12: Durable Lifecycle Recovery, implemented in Studio v0.9.
 
 ## Next Phase
 
-Phase 12: Durable Lifecycle Recovery.
+Phase 13: Evidence Gap Closure Loop.
 
 Goal:
 
-- Make local lifecycle jobs recoverable across server restarts and preserve completed, failed, cancelled, and retryable job history.
+- Turn missing evidence, blockers, and agent next actions into explicit source tasks that can be resolved, rerun, and compared.
 
 Why this is next:
 
-- Studio now has a lifecycle layer while the server process is alive. The next reliability gap is durability: serious local workflows should not lose job history or retry context when the server restarts.
+- Studio can now survive the local run lifecycle. The next product gap is helping users close the evidence gaps that keep a decision at `usable_with_warnings` instead of ready.

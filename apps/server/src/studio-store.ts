@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { RunSummary } from "@crux-studio/crux-provider";
+import type { AskInput, RunSummary } from "@crux-studio/crux-provider";
 
 export type StudioProject = {
   id: string;
@@ -35,6 +35,21 @@ export type StudioRunLink = {
   sourcePackId?: string;
 };
 
+export type StudioRunJobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+
+export type StudioRunJob = {
+  jobId: string;
+  status: StudioRunJobStatus;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  retryOf?: string;
+  input: AskInput;
+  run?: RunSummary;
+  error?: string;
+};
+
 export type StudioReviewAction = {
   id: string;
   createdAt: string;
@@ -63,6 +78,7 @@ type StudioState = {
   projects: StudioProject[];
   sourcePacks: StudioSourcePack[];
   runLinks: StudioRunLink[];
+  runJobs: StudioRunJob[];
   reviews: StudioReview[];
 };
 
@@ -81,6 +97,9 @@ export type StudioStore = {
   linkRun(input: StudioRunLink): Promise<StudioRunLink>;
   listProjectRuns(projectId: string, runs: RunSummary[]): Promise<RunSummary[]>;
   getRunLink(runId: string): Promise<StudioRunLink | undefined>;
+  saveRunJob(job: StudioRunJob): Promise<StudioRunJob>;
+  listRunJobs(): Promise<StudioRunJob[]>;
+  getRunJob(jobId: string): Promise<StudioRunJob | undefined>;
   createSourcePack(input: CreateSourcePackInput): Promise<StudioSourcePack>;
   listSourcePacks(projectId?: string): Promise<StudioSourcePack[]>;
   getSourcePack(sourcePackId: string): Promise<StudioSourcePack | undefined>;
@@ -108,6 +127,7 @@ const initialState = (): StudioState => ({
   projects: [],
   sourcePacks: [],
   runLinks: [],
+  runJobs: [],
   reviews: [],
 });
 
@@ -174,6 +194,22 @@ class MemoryStudioStore implements StudioStore {
 
   async getRunLink(runId: string): Promise<StudioRunLink | undefined> {
     return this.state.runLinks.find((item) => item.runId === runId);
+  }
+
+  async saveRunJob(job: StudioRunJob): Promise<StudioRunJob> {
+    this.state.runJobs = upsertByKey(this.state.runJobs, job, "jobId");
+    await this.persist();
+    return job;
+  }
+
+  async listRunJobs(): Promise<StudioRunJob[]> {
+    return [...this.state.runJobs].sort((left, right) =>
+      right.createdAt.localeCompare(left.createdAt),
+    );
+  }
+
+  async getRunJob(jobId: string): Promise<StudioRunJob | undefined> {
+    return this.state.runJobs.find((item) => item.jobId === jobId);
   }
 
   async createSourcePack(input: CreateSourcePackInput): Promise<StudioSourcePack> {
@@ -311,7 +347,7 @@ class FileStudioStore extends MemoryStudioStore {
 
   private async load(): Promise<void> {
     try {
-      this.state = JSON.parse(await readFile(this.statePath(), "utf8")) as StudioState;
+      this.state = normalizeState(JSON.parse(await readFile(this.statePath(), "utf8")));
     } catch {
       this.state = initialState();
     }
@@ -340,6 +376,21 @@ class FileStudioStore extends MemoryStudioStore {
   override async getRunLink(runId: string): Promise<StudioRunLink | undefined> {
     await this.load();
     return super.getRunLink(runId);
+  }
+
+  override async saveRunJob(job: StudioRunJob): Promise<StudioRunJob> {
+    await this.load();
+    return super.saveRunJob(job);
+  }
+
+  override async listRunJobs(): Promise<StudioRunJob[]> {
+    await this.load();
+    return super.listRunJobs();
+  }
+
+  override async getRunJob(jobId: string): Promise<StudioRunJob | undefined> {
+    await this.load();
+    return super.getRunJob(jobId);
   }
 
   override async createSourcePack(input: CreateSourcePackInput): Promise<StudioSourcePack> {
@@ -413,6 +464,18 @@ function summarizeReview(actions: StudioReviewAction[]): StudioReview["summary"]
       evidenceId,
       noteCount,
     })),
+  };
+}
+
+function normalizeState(value: unknown): StudioState {
+  const partial = typeof value === "object" && value !== null ? value as Partial<StudioState> : {};
+
+  return {
+    projects: Array.isArray(partial.projects) ? partial.projects : [],
+    sourcePacks: Array.isArray(partial.sourcePacks) ? partial.sourcePacks : [],
+    runLinks: Array.isArray(partial.runLinks) ? partial.runLinks : [],
+    runJobs: Array.isArray(partial.runJobs) ? partial.runJobs : [],
+    reviews: Array.isArray(partial.reviews) ? partial.reviews : [],
   };
 }
 

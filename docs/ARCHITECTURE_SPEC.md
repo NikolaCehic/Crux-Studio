@@ -174,7 +174,11 @@ v0.1:
 
 - use harness `runs/` folder as source of truth
 - Studio server indexes run directories
-- no database yet
+- Studio state is persisted in `.studio/studio-state.json`
+- projects, source packs, run links, review state, and lifecycle job history are local durable state
+- queued lifecycle jobs recover after local server restart
+- interrupted running lifecycle jobs become failed and retryable after local server restart
+- no hosted database yet
 
 v0.2:
 

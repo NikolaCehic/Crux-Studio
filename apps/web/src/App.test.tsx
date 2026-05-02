@@ -244,7 +244,7 @@ const mockFailedJob = {
   ...mockQueuedJob,
   jobId: "job-failed",
   status: "failed",
-  error: "Provider timed out.",
+  error: "Run job interrupted by a server restart before completion. Retry the job to run it again.",
 };
 
 describe("Crux Studio Ask workflow", () => {
@@ -450,6 +450,7 @@ describe("Crux Studio Ask workflow", () => {
 
     expect((await screen.findAllByText("Completed")).length).toBeGreaterThan(0);
     expect(screen.getByText("Run lifecycle")).toBeInTheDocument();
+    expect(screen.getByText(/server restart before completion/)).toBeInTheDocument();
     expect(screen.getAllByText("Retry run").length).toBeGreaterThan(0);
     expect(await screen.findByText("Trust gate")).toBeInTheDocument();
     expect(screen.getAllByText("Usable with warnings").length).toBeGreaterThan(0);
