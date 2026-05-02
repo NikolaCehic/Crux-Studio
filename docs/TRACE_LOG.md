@@ -1,5 +1,50 @@
 # Trace Log
 
+## 2026-05-02T22:55:59+02:00 - Phase 16 Decision Lineage Timeline
+
+Intent:
+
+- Implement the next productization phase under the required phase contract: full implementation, E2E/smoke tests, spec validation, artifacts, and next-phase handoff.
+- Make the path from original run to evidence task to source-backed rerun to decision delta visible as a project-level decision lineage.
+
+Implemented:
+
+- Added `GET /api/projects/:projectId/lineage`.
+- Added lineage events for source-pack creation, run creation, evidence-task opening, evidence-task resolution, evidence-closure rerun completion, and decision-delta availability.
+- Reused the existing decision delta engine inside lineage events so project history and compare output agree.
+- Added project lineage summary counts for runs, source packs, evidence tasks, resolved/open tasks, deltas, latest run, latest readiness, latest trust, and next step.
+- Added `lineage` to provider capability reporting.
+- Added Studio API types and fetch helper for project lineage.
+- Added a `Decision lineage` section to the workbench and a Lineage navigation item.
+- Refreshed lineage after project-changing actions including source-pack creation, evidence-task resolution, and completed run jobs.
+- Fixed async lifecycle source-pack durability by snapshotting source-pack files into queued jobs before provider execution.
+- Expanded local smoke to validate lineage after evidence closure.
+- Added `docs/PHASE_16_DECISION_LINEAGE_TIMELINE_SPEC.md`.
+
+Verification:
+
+- Failing server and web expectations were written first and passed after implementation.
+- Focused server product workflow test passed: `pnpm --filter @crux-studio/server test -- src/product-workflow.test.ts`.
+- Focused web workflow test passed: `pnpm --filter @crux-studio/web test -- src/App.test.tsx`.
+- Source-pack snapshot regression test passed: `pnpm --filter @crux-studio/server test -- src/app.test.ts`.
+- Full Studio verification passed: `pnpm verify`.
+- Local smoke passed: `pnpm smoke:local`.
+- Final source-backed smoke job: `job-20260502205159-0f75c609`.
+- Final source-backed smoke run: `20260502T205159Z-how-should-a-support-team-reduce-first-response-`.
+- Final evidence base run: `20260502T205200Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence task: `task-92e33974-12-adversarial-scenario-remove-evidence`.
+- Final evidence closure rerun job: `job-20260502205200-eb6a361e`.
+- Final evidence closure rerun: `20260502T205200Z-what-evidence-would-make-the-support-first-respo-2`.
+- Final evidence closure result: task `resolved`, rerun source count `1`, delta direction `improved`, closed gap count `1`, remaining blocker count `0`, comparison differences `7`, delta package bytes `6441`, lineage event count `20`, lineage delta count `1`.
+- Refreshed README screenshots:
+  - `docs/assets/crux-studio-workbench.png`
+  - `docs/assets/crux-studio-review-compare.png`
+
+Result:
+
+- Phase 16 is done.
+- Next phase: Phase 17 Decision Record Dossier.
+
 ## 2026-05-02T22:30:52+02:00 - Phase 15 Exportable Decision Delta Package
 
 Intent:

@@ -25,6 +25,7 @@ import {
   FileJson,
   FileText,
   GitCompareArrows,
+  GitBranch,
   NotebookText,
   Play,
   Plus,
@@ -66,6 +67,7 @@ import {
   createSourcePack,
   exportDecisionDeltaPackage,
   getRunJob,
+  getProjectLineage,
   getRun,
   listDemos,
   listEvidenceTasks,
@@ -79,6 +81,8 @@ import {
   resolveEvidenceTask,
   reviewClaim,
   startRunJob,
+  type DecisionLineage,
+  type DecisionLineageEvent,
   type ProviderRegistry,
   type DemoQuestion,
   type RunComparison,
@@ -150,6 +154,7 @@ const policyHelp: Record<SourcePolicy, string> = {
 const navItems = [
   { href: "#ask", icon: Plus, label: "New run" },
   { href: "#memo", icon: NotebookText, label: "Current run" },
+  { href: "#lineage", icon: GitBranch, label: "Lineage" },
   { href: "#artifacts", icon: Boxes, label: "Artifacts" },
   { href: "#trace", icon: SquareActivity, label: "Trace" },
 ];
@@ -173,12 +178,14 @@ export function App() {
   const [review, setReview] = useState<StudioReview | null>(null);
   const [evidenceTasks, setEvidenceTasks] = useState<StudioEvidenceTask[]>([]);
   const [comparison, setComparison] = useState<RunComparison | null>(null);
+  const [lineage, setLineage] = useState<DecisionLineage | null>(null);
   const [jobs, setJobs] = useState<RunJob[]>([]);
   const [activeJob, setActiveJob] = useState<RunJob | null>(null);
   const [activeTab, setActiveTab] = useState<ArtifactTab>("Brief");
   const [error, setError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isLoadingBundle, setIsLoadingBundle] = useState(false);
+  const [isLoadingLineage, setIsLoadingLineage] = useState(false);
   const [isExportingDelta, setIsExportingDelta] = useState(false);
 
   const selectedRun = bundle ?? run;
@@ -273,6 +280,10 @@ export function App() {
     };
   }, [activeJob?.jobId, activeJob?.status]);
 
+  useEffect(() => {
+    void refreshLineage(selectedProjectId);
+  }, [selectedProjectId]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -313,6 +324,7 @@ export function App() {
       setActiveTab("Brief");
       setError(null);
       await loadBundle(nextJob.run.runId);
+      await refreshLineage(nextJob.run.projectId ?? selectedProjectId);
     } else if (nextJob.status === "failed") {
       setError(nextJob.error ?? "Run job failed.");
     } else if (nextJob.status === "cancelled") {
@@ -338,6 +350,23 @@ export function App() {
       setError(caught instanceof Error ? caught.message : "Run bundle failed to load.");
     } finally {
       setIsLoadingBundle(false);
+    }
+  }
+
+  async function refreshLineage(projectId: string) {
+    if (!projectId) {
+      setLineage(null);
+      setIsLoadingLineage(false);
+      return;
+    }
+
+    setIsLoadingLineage(true);
+    try {
+      setLineage(await getProjectLineage(projectId));
+    } catch {
+      setLineage(null);
+    } finally {
+      setIsLoadingLineage(false);
     }
   }
 
@@ -392,6 +421,7 @@ export function App() {
         });
         setSourcePacks((current) => upsertById(current, pack));
         setSelectedSourcePackId(pack.id);
+        await refreshLineage(project.id);
         return;
       }
 
@@ -402,6 +432,7 @@ export function App() {
       });
       setSourcePacks((current) => upsertById(current, pack));
       setSelectedSourcePackId(pack.id);
+      await refreshLineage(projectId);
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Source pack creation failed.");
@@ -478,6 +509,7 @@ export function App() {
       setSelectedProjectId(result.sourcePack.projectId);
       setSelectedSourcePackId(result.sourcePack.id);
       await applyRunJob(result.job);
+      await refreshLineage(result.sourcePack.projectId);
       setActiveTab("Brief");
       setError(null);
     } catch (caught) {
@@ -565,7 +597,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.12 · workspace
+              v0.13 · workspace
             </p>
           </div>
         </div>
@@ -574,7 +606,7 @@ export function App() {
           <p className="px-2 font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
             Workspace
           </p>
-          <div className="grid grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-1">
+          <div className="grid grid-cols-2 gap-1 sm:grid-cols-5 lg:grid-cols-1">
             {navItems.map((item) => (
               <Button
                 asChild
@@ -770,6 +802,8 @@ export function App() {
             evidenceTasks={evidenceTasks}
             isExportingDelta={isExportingDelta}
             isLoadingBundle={isLoadingBundle}
+            isLoadingLineage={isLoadingLineage}
+            lineage={lineage}
             review={review}
             selectedRun={selectedRun}
             onAnnotateEvidence={handleAnnotateEvidence}
@@ -1288,6 +1322,8 @@ function MemoPanel({
   evidenceTasks,
   isExportingDelta,
   isLoadingBundle,
+  isLoadingLineage,
+  lineage,
   review,
   selectedRun,
   onAnnotateEvidence,
@@ -1304,6 +1340,8 @@ function MemoPanel({
   evidenceTasks: StudioEvidenceTask[];
   isExportingDelta: boolean;
   isLoadingBundle: boolean;
+  isLoadingLineage: boolean;
+  lineage: DecisionLineage | null;
   review: StudioReview | null;
   selectedRun: RunBundle | RunSummary | null;
   onAnnotateEvidence: (evidenceId: string) => void;
@@ -1363,6 +1401,10 @@ function MemoPanel({
               onChangeTab={onChangeTab}
               onResolveEvidenceTask={onResolveEvidenceTask}
               onReviewClaim={onReviewClaim}
+            />
+            <DecisionLineageTimeline
+              isLoading={isLoadingLineage}
+              lineage={lineage}
             />
             <ReviewSummary review={review} runId={selectedRun.runId} />
             {comparison ? (
@@ -2046,6 +2088,163 @@ function ReviewSummary({
   );
 }
 
+function DecisionLineageTimeline({
+  isLoading,
+  lineage,
+}: {
+  isLoading: boolean;
+  lineage: DecisionLineage | null;
+}) {
+  const events = lineage?.events ?? [];
+  const visibleEvents = events.slice(-8);
+
+  return (
+    <section
+      aria-label="Decision lineage"
+      className="mt-4 grid gap-4 rounded-lg border bg-muted/20 p-4 text-sm"
+      id="lineage"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+            <GitBranch className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+              Project history
+            </p>
+            <h3 className="mt-1 font-semibold">Decision lineage</h3>
+            <p className="mt-1 text-muted-foreground">
+              Source packs, evidence gaps, reruns, and decision deltas in one chain.
+            </p>
+          </div>
+        </div>
+        {lineage ? (
+          <div className="flex flex-wrap justify-end gap-2">
+            <Badge variant="secondary">{lineage.summary.runCount} runs</Badge>
+            <Badge variant="outline">{lineage.summary.deltaCount} deltas</Badge>
+          </div>
+        ) : null}
+      </div>
+
+      {isLoading ? (
+        <div className="grid gap-2">
+          <Skeleton className="h-14" />
+          <Skeleton className="h-14" />
+          <Skeleton className="h-14" />
+        </div>
+      ) : !lineage ? (
+        <p className="rounded-md border border-dashed bg-background p-3 text-muted-foreground">
+          Select a project to see how the decision evolved.
+        </p>
+      ) : (
+        <>
+          <div className="grid gap-3 2xl:grid-cols-3">
+            <LineageMetric
+              label="Evidence tasks"
+              value={`${lineage.summary.resolvedTaskCount}/${lineage.summary.evidenceTaskCount} resolved`}
+            />
+            <LineageMetric
+              label="Latest readiness"
+              value={formatStatusText(lineage.summary.latestReadiness ?? "waiting")}
+            />
+            <LineageMetric
+              label="Next step"
+              value={lineage.summary.nextStep}
+            />
+          </div>
+
+          {visibleEvents.length ? (
+            <ol className="grid gap-2">
+              {visibleEvents.map((event) => (
+                <DecisionLineageEventItem event={event} key={event.id} />
+              ))}
+            </ol>
+          ) : (
+            <p className="rounded-md border border-dashed bg-background p-3 text-muted-foreground">
+              This project has no recorded lineage yet.
+            </p>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function LineageMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1 rounded-md border bg-background p-3">
+      <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+        {label}
+      </p>
+      <p className="line-clamp-3 break-words font-medium leading-snug">{value}</p>
+    </div>
+  );
+}
+
+function DecisionLineageEventItem({ event }: { event: DecisionLineageEvent }) {
+  const Icon = lineageEventIcon(event.type);
+  const runPair = event.leftRunId && event.rightRunId
+    ? `${shortIdentifier(event.leftRunId)} to ${shortIdentifier(event.rightRunId)}`
+    : null;
+
+  return (
+    <li className="rounded-md border bg-background p-3">
+      <div className="flex items-start gap-3">
+        <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-primary">
+          <Icon className="size-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-semibold">{event.title}</p>
+            <Badge variant={event.type === "decision_delta_available" ? "secondary" : "outline"}>
+              {lineageEventLabel(event.type)}
+            </Badge>
+            {event.delta ? (
+              <Badge variant="outline">{event.delta.label}</Badge>
+            ) : null}
+          </div>
+          <p className="mt-1 text-muted-foreground">{event.detail}</p>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[0.68rem] text-muted-foreground">
+            <span>{formatTimestamp(event.timestamp)}</span>
+            {event.runId ? <span>{shortIdentifier(event.runId)}</span> : null}
+            {runPair ? <span>{runPair}</span> : null}
+            {event.taskId ? <span>{shortIdentifier(event.taskId)}</span> : null}
+            {event.jobId ? <span>{shortIdentifier(event.jobId)}</span> : null}
+          </div>
+          {event.delta ? (
+            <p className="mt-2 text-muted-foreground">
+              {event.delta.closedGapCount} closed gaps, {event.delta.remainingBlockerCount} remaining blockers.
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function lineageEventIcon(type: DecisionLineageEvent["type"]) {
+  return {
+    source_pack_created: FileText,
+    run_created: Play,
+    evidence_task_opened: CircleDashed,
+    evidence_task_resolved: CircleCheck,
+    rerun_completed: RotateCcw,
+    decision_delta_available: GitCompareArrows,
+  }[type];
+}
+
+function lineageEventLabel(type: DecisionLineageEvent["type"]) {
+  return {
+    source_pack_created: "source",
+    run_created: "run",
+    evidence_task_opened: "task",
+    evidence_task_resolved: "resolved",
+    rerun_completed: "rerun",
+    decision_delta_available: "delta",
+  }[type];
+}
+
 function ComparisonSummary({
   comparison,
   isExporting,
@@ -2487,6 +2686,12 @@ function truncateText(value: string, maxLength: number): string {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3).trim()}...`;
 }
 
+function formatStatusText(value: string): string {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function isPendingJob(status: RunJob["status"]): boolean {
   return status === "queued" || status === "running";
 }
@@ -2560,6 +2765,28 @@ function readFileText(file: File): Promise<string> {
     reader.addEventListener("error", () => reject(reader.error ?? new Error("File read failed.")));
     reader.readAsText(file);
   });
+}
+
+function formatTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function shortIdentifier(value: string): string {
+  if (value.length <= 28) {
+    return value;
+  }
+
+  return `${value.slice(0, 18)}...${value.slice(-6)}`;
 }
 
 function formatBytes(size: number): string {

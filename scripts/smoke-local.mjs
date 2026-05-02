@@ -182,6 +182,26 @@ async function main() {
       throw new Error(`Decision delta package is missing expected text: ${expectedText}`);
     }
   }
+  const lineage = await getJson(`${serverUrl}/api/projects/${project.id}/lineage`);
+  const lineageEventTypes = lineage.events?.map((event) => event.type) ?? [];
+  for (const expectedType of [
+    "run_created",
+    "evidence_task_opened",
+    "evidence_task_resolved",
+    "rerun_completed",
+    "decision_delta_available",
+  ]) {
+    if (!lineageEventTypes.includes(expectedType)) {
+      throw new Error(`Decision lineage is missing event type: ${expectedType}`);
+    }
+  }
+  const lineageDelta = lineage.events.find((event) => event.type === "decision_delta_available");
+  if (!lineageDelta?.delta || lineageDelta.delta.direction !== "improved") {
+    throw new Error(`Decision lineage did not preserve the improved delta: ${JSON.stringify(lineageDelta)}`);
+  }
+  if (lineage.summary?.latestRunId !== evidenceClosureRun.runId) {
+    throw new Error(`Decision lineage latest run mismatch: ${lineage.summary?.latestRunId}`);
+  }
 
   console.log(JSON.stringify({
     ok: health.ok === true,
@@ -220,6 +240,9 @@ async function main() {
       remainingBlockerCount: closureDelta.blockerMovement.remainingBlockers.length,
       nextStep: closureDelta.nextStep,
       deltaPackageBytes: deltaPackage.length,
+      lineageEventCount: lineage.events.length,
+      lineageDeltaCount: lineage.summary.deltaCount,
+      lineageNextStep: lineage.summary.nextStep,
     },
   }, null, 2));
 }

@@ -67,6 +67,7 @@ Ask a question
 -> Review claims and annotate evidence
 -> Replay with better inputs
 -> Compare runs
+-> Read the project lineage
 -> Export a decision package
 ```
 
@@ -116,6 +117,7 @@ Studio supports replaying a run with the same question and context, comparing th
 - Resolve evidence tasks with source notes, then automatically create a source pack, rerun, and compare the improved run.
 - Read a decision delta report that explains what changed between two runs, why trust moved, which evidence gaps closed, which blockers remain, and what to do next.
 - Export the decision delta as a Markdown package with the newer memo and human review context.
+- See a project-level decision lineage that connects source packs, runs, evidence tasks, reruns, and decision deltas.
 - Start from canonical demo questions.
 - Inspect the memo, claims, evidence, sources, contradictions, uncertainty, bounded agents, council output, diagnostics, and trace.
 - See run readiness as ready, usable with warnings, or blocked.
@@ -254,7 +256,7 @@ Smoke check a running local Studio:
 pnpm smoke:local
 ```
 
-The smoke check creates source-backed lifecycle jobs, verifies durable lifecycle history, closes an evidence task with a source note, reruns Crux, and compares the improved run.
+The smoke check creates source-backed lifecycle jobs, verifies durable lifecycle history, closes an evidence task with a source note, reruns Crux, compares the improved run, exports the delta package, and validates the project lineage.
 
 The project is developed with a TDD-first workflow. Product behavior is covered across the provider package, server API, and web app.
 
@@ -278,6 +280,7 @@ It is intentionally not a hosted team control plane yet. Authentication, teams, 
 - [Phase 13 evidence gap closure spec](docs/PHASE_13_EVIDENCE_GAP_CLOSURE_SPEC.md)
 - [Phase 14 decision delta report spec](docs/PHASE_14_DECISION_DELTA_REPORT_SPEC.md)
 - [Phase 15 exportable decision delta package spec](docs/PHASE_15_EXPORTABLE_DECISION_DELTA_PACKAGE_SPEC.md)
+- [Phase 16 decision lineage timeline spec](docs/PHASE_16_DECISION_LINEAGE_TIMELINE_SPEC.md)
 - [Demo guide](docs/DEMO_GUIDE.md)
 - [Trace log](docs/TRACE_LOG.md)
 - [Changelog](CHANGELOG.md)

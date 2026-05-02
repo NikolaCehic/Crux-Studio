@@ -277,6 +277,82 @@ const mockResolvedEvidenceTask = {
   rerunJobId: "job-gap-resolution",
 };
 
+const mockLineage = {
+  projectId: "project-bakery",
+  summary: {
+    runCount: 2,
+    sourcePackCount: 1,
+    evidenceTaskCount: 1,
+    resolvedTaskCount: 1,
+    deltaCount: 1,
+    latestRunId: "mock-replay",
+    latestReadiness: "ready",
+    nextStep: "Review claims and export the decision package.",
+  },
+  events: [
+    {
+      id: "run-mock-ask",
+      type: "run_created",
+      timestamp: "2026-05-01T10:00:00.000Z",
+      title: "Run created",
+      detail: "How should a support team reduce first-response time?",
+      runId: "mock-ask",
+      status: "usable_with_warnings",
+      trustStatus: "warn",
+      readinessStatus: "usable_with_warnings",
+    },
+    {
+      id: "task-current-response-time-baseline-opened",
+      type: "evidence_task_opened",
+      timestamp: "2026-05-01T10:00:00.000Z",
+      title: "Evidence task opened",
+      detail: "Current response-time baseline",
+      taskId: "task-current-response-time-baseline",
+      runId: "mock-ask",
+      status: "open",
+    },
+    {
+      id: "task-current-response-time-baseline-resolved",
+      type: "evidence_task_resolved",
+      timestamp: "2026-05-01T10:00:03.000Z",
+      title: "Evidence task resolved",
+      detail: "Current response-time baseline",
+      taskId: "task-current-response-time-baseline",
+      sourcePackId: "source-pack-evidence-gap",
+      jobId: "job-gap-resolution",
+      status: "resolved",
+    },
+    {
+      id: "job-gap-resolution-rerun-completed",
+      type: "rerun_completed",
+      timestamp: "2026-05-01T10:00:04.000Z",
+      title: "Rerun completed",
+      detail: "Evidence closure rerun finished.",
+      runId: "mock-replay",
+      jobId: "job-gap-resolution",
+      readinessStatus: "ready",
+      trustStatus: "pass",
+    },
+    {
+      id: "mock-ask-to-mock-replay-delta",
+      type: "decision_delta_available",
+      timestamp: "2026-05-01T10:00:04.000Z",
+      title: "Decision delta ready",
+      detail: "The newer run is stronger because trust improved and evidence gaps closed.",
+      leftRunId: "mock-ask",
+      rightRunId: "mock-replay",
+      delta: {
+        direction: "improved",
+        label: "+10 pts",
+        nextStep: "Review claims and export the decision package.",
+        closedGapCount: 1,
+        remainingBlockerCount: 0,
+        sourceCountDelta: 1,
+      },
+    },
+  ],
+};
+
 describe("Crux Studio Ask workflow", () => {
   beforeEach(() => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
@@ -365,6 +441,13 @@ describe("Crux Studio Ask workflow", () => {
         if (url.endsWith("/api/projects") && init?.method === "POST") {
           return new Response(JSON.stringify(mockProject), {
             status: 201,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url.endsWith("/api/projects/project-bakery/lineage")) {
+          return new Response(JSON.stringify(mockLineage), {
+            status: 200,
             headers: { "Content-Type": "application/json" },
           });
         }
@@ -590,6 +673,10 @@ describe("Crux Studio Ask workflow", () => {
     expect(screen.getByRole("tab", { name: "Brief" })).toBeInTheDocument();
     expect(screen.getByText("Answer first")).toBeInTheDocument();
     expect(screen.getAllByText(/Use a staged approach/).length).toBeGreaterThan(0);
+    expect(await screen.findByRole("heading", { name: "Decision lineage" })).toBeInTheDocument();
+    expect(screen.getByText("Decision delta ready")).toBeInTheDocument();
+    expect(screen.getAllByText("Review claims and export the decision package.").length).toBeGreaterThan(0);
+    expect(screen.getByText("mock-ask to mock-replay")).toBeInTheDocument();
     expect(screen.getByText("Review readiness")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Open full memo"));
     expect(screen.getByRole("tab", { name: "Memo" })).toHaveAttribute("aria-selected", "true");
@@ -715,11 +802,11 @@ describe("Crux Studio Ask workflow", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Compare latest" }));
     expect(await screen.findByText("Decision delta")).toBeInTheDocument();
-    expect(screen.getByText(/newer run is stronger/)).toBeInTheDocument();
-    expect(screen.getByText("+10 pts")).toBeInTheDocument();
+    expect(screen.getAllByText(/newer run is stronger/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("+10 pts").length).toBeGreaterThan(0);
     expect(screen.getByText("1 closed")).toBeInTheDocument();
     expect(screen.getByText("Changed artifact paths")).toBeInTheDocument();
-    expect(screen.getByText("Review claims and export the decision package.")).toBeInTheDocument();
+    expect(screen.getAllByText("Review claims and export the decision package.").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Export delta package" }));
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(

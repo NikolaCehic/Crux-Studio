@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.0 - 2026-05-02
+
+- Added project-level decision lineage through `GET /api/projects/:projectId/lineage`.
+- Lineage now connects source packs, runs, evidence tasks, resolved tasks, rerun jobs, and decision delta availability.
+- Added a Studio `Decision lineage` workbench section with summary counts, latest readiness, next step, and recent timeline events.
+- Added a Lineage navigation item.
+- Expanded local smoke to verify lineage event types and improved delta preservation after evidence closure.
+- Added the Phase 16 decision lineage timeline spec artifact.
+
 ## 0.12.0 - 2026-05-02
 
 - Added a Markdown decision delta package export endpoint for run comparisons.

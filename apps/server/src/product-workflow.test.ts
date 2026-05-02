@@ -386,6 +386,73 @@ describe("Studio product workflow API", () => {
     expect(deltaPackageResponse.body).toContain("## Closed Evidence Gaps");
     expect(deltaPackageResponse.body).toContain(task.title);
     expect(deltaPackageResponse.body).toContain("## Next Step");
+
+    const lineageResponse = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/lineage`,
+    });
+    expect(lineageResponse.statusCode).toBe(200);
+    const lineage = lineageResponse.json();
+    expect(lineage.summary).toEqual(
+      expect.objectContaining({
+        runCount: 2,
+        sourcePackCount: 1,
+        evidenceTaskCount: 4,
+        resolvedTaskCount: 1,
+        openTaskCount: 3,
+        deltaCount: 1,
+        latestRunId: completedJob.run.runId,
+        latestReadiness: "ready",
+        nextStep: "Review claims and export the decision package.",
+      }),
+    );
+    expect(lineage.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "run_created",
+          runId: draftRun.runId,
+          title: "Run created",
+        }),
+        expect.objectContaining({
+          type: "evidence_task_opened",
+          taskId: task.taskId,
+          runId: draftRun.runId,
+          title: "Evidence task opened",
+        }),
+        expect.objectContaining({
+          type: "evidence_task_resolved",
+          taskId: task.taskId,
+          sourcePackId: expect.any(String),
+          jobId: job.jobId,
+          title: "Evidence task resolved",
+        }),
+        expect.objectContaining({
+          type: "rerun_completed",
+          jobId: job.jobId,
+          runId: completedJob.run.runId,
+          title: "Rerun completed",
+        }),
+        expect.objectContaining({
+          type: "decision_delta_available",
+          leftRunId: draftRun.runId,
+          rightRunId: completedJob.run.runId,
+          title: "Decision delta ready",
+          delta: expect.objectContaining({
+            direction: "improved",
+            closedGapCount: expect.any(Number),
+            remainingBlockerCount: 0,
+          }),
+        }),
+      ]),
+    );
+    const deltaEvent = lineage.events.find(
+      (event: { type: string }) => event.type === "decision_delta_available",
+    );
+    expect(deltaEvent.delta.closedGapCount).toBeGreaterThan(0);
+    const eventTypes = lineage.events.map((event: { type: string }) => event.type);
+    expect(eventTypes.indexOf("evidence_task_opened")).toBeLessThan(
+      eventTypes.indexOf("decision_delta_available"),
+    );
   });
 });
 

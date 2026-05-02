@@ -21,15 +21,16 @@ Every phase must complete these steps before it is considered done:
 - Phase 13: Evidence Gap Closure Loop, implemented in Studio v0.10.
 - Phase 14: Decision Delta Report, implemented in Studio v0.11.
 - Phase 15: Exportable Decision Delta Package, implemented in Studio v0.12.
+- Phase 16: Decision Lineage Timeline, implemented in Studio v0.13.
 
 ## Next Phase
 
-Phase 16: Decision Lineage Timeline.
+Phase 17: Decision Record Dossier.
 
 Goal:
 
-- Make the path from original run to evidence task to rerun to delta package visible as a project-level decision lineage.
+- Turn the latest reviewed run, decision delta, and lineage into one canonical project decision record.
 
 Why this is next:
 
-- Studio can now export an improved run's decision movement. The next product gap is connecting those artifacts into a readable history so users can see how a decision matured over time.
+- Studio can now show how a decision matured. The next product gap is creating a single durable dossier that combines the final recommendation, review state, evidence closure history, lineage, and export-ready decision context.

@@ -137,6 +137,7 @@ POST   /api/runs/jobs/:jobId/cancel
 POST   /api/runs/jobs/:jobId/retry
 GET    /api/runs/:runId/evidence-tasks
 POST   /api/runs/:runId/evidence-tasks/:taskId/resolve
+GET    /api/projects/:projectId/lineage
 GET    /api/runs
 GET    /api/runs/:runId
 GET    /api/runs/:runId/artifacts/:artifact
@@ -151,6 +152,8 @@ POST   /api/runs/compare/export/decision-delta-package
 `POST /api/runs/compare` returns the raw changed paths plus a decision delta object with verdict, trust movement, readiness movement, source movement, evidence gap movement, blocker movement, notable changes, and next step.
 
 `POST /api/runs/compare/export/decision-delta-package` returns a Markdown package for the same comparison, including the delta, review summaries, changed artifact paths, and the newer memo.
+
+`GET /api/projects/:projectId/lineage` returns a chronological project timeline built from source packs, runs, stored evidence tasks, evidence-task resolutions, rerun jobs, and decision delta availability.
 
 ## Run Bundle Shape For UI
 
@@ -188,6 +191,7 @@ v0.1:
 - evidence closure task resolution creates a local source pack and starts a lifecycle rerun
 - run comparison creates a decision delta report for before and after evidence closure movement
 - comparison export creates a portable Markdown decision delta package
+- project lineage derives a readable decision timeline from durable local state
 - no hosted database yet
 
 v0.2:

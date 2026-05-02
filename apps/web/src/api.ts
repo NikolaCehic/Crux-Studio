@@ -93,6 +93,57 @@ export type DecisionDeltaReport = {
   nextStep: string;
 };
 
+export type DecisionLineageEventType =
+  | "source_pack_created"
+  | "run_created"
+  | "evidence_task_opened"
+  | "evidence_task_resolved"
+  | "rerun_completed"
+  | "decision_delta_available";
+
+export type DecisionLineageEvent = {
+  id: string;
+  type: DecisionLineageEventType;
+  timestamp: string;
+  title: string;
+  detail: string;
+  runId?: string;
+  leftRunId?: string;
+  rightRunId?: string;
+  taskId?: string;
+  sourcePackId?: string;
+  jobId?: string;
+  status?: string;
+  trustStatus?: string;
+  readinessStatus?: string;
+  delta?: {
+    direction: "improved" | "regressed" | "unchanged";
+    label: string;
+    nextStep: string;
+    closedGapCount: number;
+    remainingBlockerCount: number;
+    sourceCountDelta: number;
+  };
+};
+
+export type DecisionLineage = {
+  projectId: string;
+  projectName: string;
+  summary: {
+    runCount: number;
+    sourcePackCount: number;
+    evidenceTaskCount: number;
+    resolvedTaskCount: number;
+    openTaskCount: number;
+    deltaCount: number;
+    latestRunId?: string;
+    latestReadiness?: string;
+    latestTrust?: string;
+    nextStep: string;
+  };
+  events: DecisionLineageEvent[];
+};
+
 export type ProviderRegistry = {
   providers: Array<{
     id: string;
@@ -162,6 +213,13 @@ export async function retryRunJob(jobId: string): Promise<RunJob> {
 
 export async function listProjects(): Promise<StudioProject[]> {
   return getJson("/api/projects", "Projects failed to load.");
+}
+
+export async function getProjectLineage(projectId: string): Promise<DecisionLineage> {
+  return getJson(
+    `/api/projects/${encodeURIComponent(projectId)}/lineage`,
+    "Decision lineage failed to load.",
+  );
 }
 
 export async function createProject(name: string): Promise<StudioProject> {

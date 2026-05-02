@@ -11,8 +11,10 @@ import { z } from "zod";
 import {
   createMemoryStudioStore,
   type StudioEvidenceTask,
+  type StudioProject,
   type StudioRunJob,
   type StudioRunJobStatus,
+  type StudioSourcePack,
   type StudioStore,
 } from "./studio-store";
 
@@ -80,6 +82,7 @@ type StudioAskInput = {
   sourcePolicy?: SourcePolicy;
   projectId?: string;
   sourcePackId?: string;
+  sourcePack?: AskInput["sourcePack"];
 };
 
 type RunJobStatus = StudioRunJobStatus;
@@ -180,27 +183,30 @@ export function buildServer({
   }
 
   async function askProvider(input: StudioAskInput): Promise<RunSummary> {
-    const sourcePack = input.sourcePackId
-      ? await store.getSourcePack(input.sourcePackId)
-      : undefined;
+    const sourcePack = input.sourcePack ?? (
+      input.sourcePackId
+        ? await store.getSourcePack(input.sourcePackId).then((pack) =>
+            pack ? toProviderSourcePack(pack) : undefined,
+          )
+        : undefined
+    );
     const providerInput: AskInput = {
       ...input,
-      sourcePack: sourcePack
-        ? {
-            id: sourcePack.id,
-            name: sourcePack.name,
-            sourceCount: sourcePack.sourceCount,
-            files: sourcePack.files.map((file) => ({
-              name: file.name,
-              content: file.content,
-              contentHash: file.contentHash,
-              size: file.size,
-            })),
-          }
-        : undefined,
+      sourcePack,
     };
 
     return provider.ask(providerInput);
+  }
+
+  async function hydrateSourcePackSnapshot(input: StudioAskInput): Promise<StudioAskInput> {
+    if (input.sourcePack || !input.sourcePackId) {
+      return input;
+    }
+
+    const sourcePack = await store.getSourcePack(input.sourcePackId);
+    return sourcePack
+      ? { ...input, sourcePack: toProviderSourcePack(sourcePack) }
+      : input;
   }
 
   async function persistRunLink(input: StudioAskInput, run: RunSummary) {
@@ -264,13 +270,14 @@ export function buildServer({
     await ensureRecoveredJobs();
 
     const createdAt = now();
+    const jobInput = await hydrateSourcePackSnapshot(input);
     const job: RunJob = {
       jobId: `job-${createdAt.replace(/[^0-9]/g, "").slice(0, 14)}-${randomUUID().slice(0, 8)}`,
       status: "queued",
       createdAt,
       updatedAt: createdAt,
       retryOf,
-      input,
+      input: jobInput,
     };
 
     runJobs.set(job.jobId, job);
@@ -377,6 +384,7 @@ export function buildServer({
           "demos",
           "readiness",
           "export",
+          "lineage",
         ],
       },
     ],
@@ -466,6 +474,46 @@ export function buildServer({
       sortRunsNewestFirst(
         await store.listProjectRuns(request.params.projectId, await provider.listRuns()),
       ),
+  );
+
+  app.get<{ Params: { projectId: string } }>(
+    "/api/projects/:projectId/lineage",
+    async (request, reply) => {
+      const project = (await store.listProjects()).find(
+        (item) => item.id === request.params.projectId,
+      );
+      if (!project) {
+        return reply.code(404).send({ message: "Project not found." });
+      }
+
+      try {
+        const projectRuns = sortRunsNewestFirst(
+          await store.listProjectRuns(project.id, await provider.listRuns()),
+        );
+        const [bundles, sourcePacks, evidenceTasks, jobs] = await Promise.all([
+          Promise.all(projectRuns.map((run) => provider.getRun(run.runId))),
+          store.listSourcePacks(project.id),
+          Promise.all(
+            projectRuns.map((run) =>
+              store.listEvidenceTasks(run.runId).catch(() => [] as StudioEvidenceTask[]),
+            ),
+          ).then((items) => items.flat()),
+          listRunJobs(),
+        ]);
+
+        return buildDecisionLineage({
+          project,
+          runs: bundles.map((bundle) =>
+            enrichRun(bundle, projectRuns.find((run) => run.runId === bundle.runId)),
+          ),
+          sourcePacks,
+          evidenceTasks,
+          jobs,
+        });
+      } catch {
+        return reply.code(404).send({ message: "Project lineage failed to load." });
+      }
+    },
   );
 
   app.post("/api/source-packs", async (request, reply) => {
@@ -831,6 +879,57 @@ export function buildServer({
 
 type RunLike = Awaited<ReturnType<CruxProvider["getRun"]>>;
 
+type DecisionLineageEventType =
+  | "source_pack_created"
+  | "run_created"
+  | "evidence_task_opened"
+  | "evidence_task_resolved"
+  | "rerun_completed"
+  | "decision_delta_available";
+
+type DecisionLineageEvent = {
+  id: string;
+  type: DecisionLineageEventType;
+  timestamp: string;
+  title: string;
+  detail: string;
+  runId?: string;
+  leftRunId?: string;
+  rightRunId?: string;
+  taskId?: string;
+  sourcePackId?: string;
+  jobId?: string;
+  status?: string;
+  trustStatus?: string;
+  readinessStatus?: string;
+  delta?: {
+    direction: "improved" | "regressed" | "unchanged";
+    label: string;
+    nextStep: string;
+    closedGapCount: number;
+    remainingBlockerCount: number;
+    sourceCountDelta: number;
+  };
+};
+
+type DecisionLineage = {
+  projectId: string;
+  projectName: string;
+  summary: {
+    runCount: number;
+    sourcePackCount: number;
+    evidenceTaskCount: number;
+    resolvedTaskCount: number;
+    openTaskCount: number;
+    deltaCount: number;
+    latestRunId?: string;
+    latestReadiness?: string;
+    latestTrust?: string;
+    nextStep: string;
+  };
+  events: DecisionLineageEvent[];
+};
+
 function enrichRun<T extends { runId: string }>(
   run: T,
   link: { projectId?: string; sourcePackId?: string } | undefined,
@@ -847,6 +946,202 @@ function sortRunsNewestFirst<T extends { createdAt: string; runId: string }>(run
 
     return right.runId.localeCompare(left.runId);
   });
+}
+
+function toProviderSourcePack(sourcePack: StudioSourcePack): AskInput["sourcePack"] {
+  return {
+    id: sourcePack.id,
+    name: sourcePack.name,
+    sourceCount: sourcePack.sourceCount,
+    files: sourcePack.files.map((file) => ({
+      name: file.name,
+      content: file.content,
+      contentHash: file.contentHash,
+      size: file.size,
+    })),
+  };
+}
+
+function buildDecisionLineage({
+  project,
+  runs,
+  sourcePacks,
+  evidenceTasks,
+  jobs,
+}: {
+  project: StudioProject;
+  runs: RunLike[];
+  sourcePacks: StudioSourcePack[];
+  evidenceTasks: StudioEvidenceTask[];
+  jobs: RunJob[];
+}): DecisionLineage {
+  const runById = new Map(runs.map((run) => [run.runId, run]));
+  const taskByRerunJobId = new Map(
+    evidenceTasks
+      .filter((task) => task.rerunJobId)
+      .map((task) => [task.rerunJobId as string, task]),
+  );
+  const events: DecisionLineageEvent[] = [];
+
+  for (const sourcePack of sourcePacks) {
+    events.push({
+      id: `${sourcePack.id}-created`,
+      type: "source_pack_created",
+      timestamp: sourcePack.createdAt,
+      title: "Source pack attached",
+      detail: `${sourcePack.name} (${sourcePack.sourceCount} ${plural("source", sourcePack.sourceCount)})`,
+      sourcePackId: sourcePack.id,
+      status: "available",
+    });
+  }
+
+  for (const run of runs) {
+    events.push({
+      id: `${run.runId}-created`,
+      type: "run_created",
+      timestamp: run.createdAt,
+      title: "Run created",
+      detail: run.question,
+      runId: run.runId,
+      sourcePackId: run.sourcePackId,
+      status: run.readiness.status,
+      trustStatus: run.trust.status,
+      readinessStatus: run.readiness.status,
+    });
+  }
+
+  for (const task of evidenceTasks) {
+    events.push({
+      id: `${task.taskId}-opened`,
+      type: "evidence_task_opened",
+      timestamp: task.createdAt,
+      title: "Evidence task opened",
+      detail: task.title,
+      runId: task.runId,
+      taskId: task.taskId,
+      status: task.status,
+    });
+
+    if (task.resolvedAt) {
+      events.push({
+        id: `${task.taskId}-resolved`,
+        type: "evidence_task_resolved",
+        timestamp: task.resolvedAt,
+        title: "Evidence task resolved",
+        detail: task.resolutionNote
+          ? `${task.title}: ${task.resolutionNote}`
+          : task.title,
+        runId: task.runId,
+        taskId: task.taskId,
+        sourcePackId: task.resolvedBySourcePackId,
+        jobId: task.rerunJobId,
+        status: "resolved",
+      });
+    }
+  }
+
+  for (const job of jobs) {
+    const task = taskByRerunJobId.get(job.jobId);
+    if (!task || job.status !== "succeeded" || !job.run) {
+      continue;
+    }
+
+    events.push({
+      id: `${job.jobId}-rerun-completed`,
+      type: "rerun_completed",
+      timestamp: job.finishedAt ?? job.updatedAt,
+      title: "Rerun completed",
+      detail: `Evidence closure rerun finished for ${task.title}.`,
+      runId: job.run.runId,
+      taskId: task.taskId,
+      sourcePackId: job.input.sourcePackId,
+      jobId: job.jobId,
+      status: job.status,
+      trustStatus: job.run.trust.status,
+      readinessStatus: job.run.readiness.status,
+    });
+
+    const left = runById.get(task.runId);
+    const right = runById.get(job.run.runId);
+    if (left && right) {
+      const comparison = compareRunBundles(left, right, [task.title]);
+      events.push({
+        id: `${task.runId}-to-${job.run.runId}-delta`,
+        type: "decision_delta_available",
+        timestamp: job.finishedAt ?? job.updatedAt,
+        title: "Decision delta ready",
+        detail: comparison.delta.verdict,
+        leftRunId: left.runId,
+        rightRunId: right.runId,
+        taskId: task.taskId,
+        sourcePackId: job.input.sourcePackId,
+        jobId: job.jobId,
+        status: comparison.delta.trustMovement.direction,
+        delta: {
+          direction: comparison.delta.trustMovement.direction,
+          label: comparison.delta.trustMovementLabel,
+          nextStep: comparison.delta.nextStep,
+          closedGapCount: comparison.delta.sourceMovement.closedGaps.length,
+          remainingBlockerCount: comparison.delta.blockerMovement.remainingBlockers.length,
+          sourceCountDelta: comparison.delta.sourceMovement.sourceCountDelta,
+        },
+      });
+    }
+  }
+
+  const sortedEvents = events.sort(compareLineageEvents);
+  const newestRun = sortRunsNewestFirst(runs)[0];
+  const deltaEvents = sortedEvents.filter((event) => event.type === "decision_delta_available");
+  const latestDelta = deltaEvents[deltaEvents.length - 1];
+  const openTasks = evidenceTasks.filter((task) => task.status === "open");
+  const resolvedTasks = evidenceTasks.filter((task) => task.status === "resolved");
+
+  return {
+    projectId: project.id,
+    projectName: project.name,
+    summary: {
+      runCount: runs.length,
+      sourcePackCount: sourcePacks.length,
+      evidenceTaskCount: evidenceTasks.length,
+      resolvedTaskCount: resolvedTasks.length,
+      openTaskCount: openTasks.length,
+      deltaCount: deltaEvents.length,
+      latestRunId: newestRun?.runId,
+      latestReadiness: newestRun?.readiness.status,
+      latestTrust: newestRun?.trust.status,
+      nextStep:
+        latestDelta?.delta?.nextStep ??
+        newestRun?.readiness.nextAction ??
+        openTasks[0]?.title ??
+        "Create a run, close evidence gaps, and compare the next decision state.",
+    },
+    events: sortedEvents,
+  };
+}
+
+function compareLineageEvents(left: DecisionLineageEvent, right: DecisionLineageEvent) {
+  const timestampOrder = left.timestamp.localeCompare(right.timestamp);
+  if (timestampOrder !== 0) {
+    return timestampOrder;
+  }
+
+  const priorityOrder = lineageEventPriority(left.type) - lineageEventPriority(right.type);
+  if (priorityOrder !== 0) {
+    return priorityOrder;
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
+function lineageEventPriority(type: DecisionLineageEventType) {
+  return {
+    source_pack_created: 0,
+    run_created: 1,
+    evidence_task_opened: 2,
+    evidence_task_resolved: 3,
+    rerun_completed: 4,
+    decision_delta_available: 5,
+  }[type];
 }
 
 function createEvidenceTasksFromRun(

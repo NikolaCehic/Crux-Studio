@@ -191,6 +191,64 @@ describe("Studio run API", () => {
     expect(providers.json().providers[0].capabilities).toContain("lifecycle");
   });
 
+  it("snapshots source pack files into queued lifecycle jobs", async () => {
+    const provider = new DeferredCruxProvider();
+    const app = buildServer({ provider });
+    apps.push(app);
+
+    const projectResponse = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: { name: "Source Snapshot" },
+    });
+    const project = projectResponse.json();
+
+    const sourcePackResponse = await app.inject({
+      method: "POST",
+      url: "/api/source-packs",
+      payload: {
+        projectId: project.id,
+        name: "Snapshot pack",
+        files: [
+          {
+            name: "baseline.md",
+            content: "# Baseline\n\nThe source should survive async queue persistence.",
+          },
+        ],
+      },
+    });
+    const sourcePack = sourcePackResponse.json();
+
+    const jobResponse = await app.inject({
+      method: "POST",
+      url: "/api/runs/jobs",
+      payload: {
+        projectId: project.id,
+        sourcePackId: sourcePack.id,
+        question: "Should source-backed queued jobs preserve source files?",
+        sourcePolicy: "hybrid",
+      },
+    });
+    expect(jobResponse.statusCode).toBe(202);
+    expect(jobResponse.json().input.sourcePack).toEqual(
+      expect.objectContaining({
+        id: sourcePack.id,
+        name: "Snapshot pack",
+        files: [
+          expect.objectContaining({
+            name: "baseline.md",
+            content: expect.stringContaining("survive async queue persistence"),
+          }),
+        ],
+      }),
+    );
+
+    await waitForJob(app, jobResponse.json().jobId, "running");
+    expect(provider.pendingInput()?.sourcePack?.files?.[0]?.content).toContain(
+      "survive async queue persistence",
+    );
+  });
+
   it("creates, lists, and fetches Crux runs through the provider boundary", async () => {
     const provider = new MockCruxProvider({
       now: () => "2026-05-01T10:00:00.000Z",
@@ -347,6 +405,10 @@ class DeferredCruxProvider implements CruxProvider {
 
   pendingCount() {
     return this.pending.length;
+  }
+
+  pendingInput(index = 0) {
+    return this.pending[index]?.input;
   }
 
   async resolveNext() {

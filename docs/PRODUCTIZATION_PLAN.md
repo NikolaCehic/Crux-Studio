@@ -222,7 +222,7 @@ The first implementation slice is Phase 2 plus the first part of Phase 3:
 
 ## Local-First Implementation Status
 
-Implemented in Studio v0.4 through v0.12:
+Implemented in Studio v0.4 through v0.13:
 
 - Phase 1: canonical demo questions are exposed through `/api/demos` and the ask panel.
 - Phase 2: the provider boundary carries readiness, Harness version, source summaries, bounded agents, source inventory, source chunks, and eval reports.
@@ -240,6 +240,7 @@ Implemented in Studio v0.4 through v0.12:
 - Phase 13: Studio v0.10 turns source gaps into evidence tasks that can create source packs, rerun Crux, and compare the improved run.
 - Phase 14: Studio v0.11 turns run comparison into a decision delta report with verdict, trust movement, source movement, closed gaps, blockers, notable changes, and next step.
 - Phase 15: Studio v0.12 exports the decision delta as a Markdown package with memo, review, source movement, blocker movement, and changed artifact paths.
+- Phase 16: Studio v0.13 adds a project-level decision lineage timeline that connects source packs, runs, evidence tasks, reruns, and decision deltas.
 
 Still deferred:
 
