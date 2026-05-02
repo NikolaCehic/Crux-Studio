@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/crux-studio-workbench.png" alt="Crux Studio workbench with question input, decision memo, trust gate, artifacts, and review panels" />
+  <img src="docs/assets/crux-studio-workbench.png" alt="Crux Studio workbench with question input, decision brief, trust gate, artifacts, and review panels" />
 </p>
 
 Crux Studio is a product interface for serious agent analysis.
@@ -62,7 +62,7 @@ That makes it a better fit for operational decisions, product strategy, technica
 Ask a question
 -> Add context and source material
 -> Run Crux
--> Read the decision memo
+-> Read the decision brief
 -> Inspect claims, evidence, sources, uncertainty, bounded agents, diagnostics, council output, and trace
 -> Review claims and annotate evidence
 -> Replay with better inputs
@@ -75,6 +75,10 @@ Ask a question
 ### Ask A Decision-Grade Question
 
 Start with a question, practical context, a time horizon, and an optional source pack. Studio keeps the input focused on the decision, not on prompt engineering.
+
+### Read The Decision Brief
+
+Every completed run opens on a short decision brief first: recommendation, readiness, confidence, source coverage, next action, and blockers. The full memo and artifact trail stay one click away.
 
 ### Inspect The Run
 
@@ -105,6 +109,7 @@ Studio supports replaying a run with the same question and context, comparing th
 - Attach source packs to runs.
 - Materialize attached source packs into real local Crux Harness source packs, inventories, and chunks.
 - Reopen the latest run automatically when returning to the workspace.
+- Land on an answer-first decision brief for every completed run.
 - Start from canonical demo questions.
 - Inspect the memo, claims, evidence, sources, contradictions, uncertainty, bounded agents, council output, diagnostics, and trace.
 - See run readiness as ready, usable with warnings, or blocked.
@@ -261,6 +266,7 @@ It is intentionally not a hosted team control plane yet. Authentication, teams, 
 - [Phased plan](docs/PHASED_PLAN.md)
 - [Productization plan](docs/PRODUCTIZATION_PLAN.md)
 - [Phase execution protocol](docs/PHASE_EXECUTION_PROTOCOL.md)
+- [Phase 10 answer-first brief spec](docs/PHASE_10_ANSWER_FIRST_DECISION_BRIEF_SPEC.md)
 - [Demo guide](docs/DEMO_GUIDE.md)
 - [Trace log](docs/TRACE_LOG.md)
 - [Changelog](CHANGELOG.md)

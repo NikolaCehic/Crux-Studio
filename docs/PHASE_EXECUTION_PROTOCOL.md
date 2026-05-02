@@ -15,15 +15,16 @@ Every phase must complete these steps before it is considered done:
 ## Current Phase Status
 
 - Phase 09: Source File Upload Workspace, implemented in Studio v0.6.
+- Phase 10: Answer-First Decision Brief, implemented in Studio v0.7.
 
 ## Next Phase
 
-Phase 10: Answer-First Decision Brief.
+Phase 11: Async Run Lifecycle.
 
 Goal:
 
-- Make Studio show a clean, normal-user decision answer first while keeping the full run, claims, evidence, agents, sources, council, diagnostics, trace, review, replay, and export surfaces inspectable.
+- Make long-running local Harness work feel controlled and observable from Studio.
 
 Why this is next:
 
-- Source-backed runs now work. The highest-leverage product gap is readability for non-operators: a user should immediately see the practical answer, then inspect why Crux believes it.
+- The answer-first workbench now makes completed runs usable. The next product risk is run lifecycle control: users need clear pending, running, completed, failed, retry, and cancellation states before Crux feels dependable for heavier real-world runs.

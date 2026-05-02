@@ -382,17 +382,24 @@ describe("Crux Studio Ask workflow", () => {
     });
 
     expect(await screen.findByText("Trust gate")).toBeInTheDocument();
-    expect(screen.getByText("Usable with warnings")).toBeInTheDocument();
+    expect(screen.getAllByText("Usable with warnings").length).toBeGreaterThan(0);
     expect(screen.getAllByText("warn").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Use a staged approach/).length).toBeGreaterThan(0);
     expect(screen.getByText("runs/mock-ask/decision_memo.md")).toBeInTheDocument();
-    expect(screen.getByText(/Offline mock run/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Offline mock run/).length).toBeGreaterThan(0);
   });
 
   it("preloads the latest run so returning users land on a useful workbench", async () => {
     render(<App />);
 
-    expect(await screen.findByText("Decision memo")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Decision brief" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Brief" })).toBeInTheDocument();
+    expect(screen.getByText("Answer first")).toBeInTheDocument();
+    expect(screen.getAllByText(/Use a staged approach/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Review readiness")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Open full memo"));
+    expect(screen.getByRole("tab", { name: "Memo" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: "Recommendation" })).toBeInTheDocument();
     expect(screen.getByText("runs/mock-ask/decision_memo.md")).toBeInTheDocument();
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith("/api/runs/mock-ask");

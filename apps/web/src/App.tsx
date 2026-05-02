@@ -90,6 +90,7 @@ type SourceDraftFile = {
 };
 
 type ArtifactTab =
+  | "Brief"
   | "Memo"
   | "Claims"
   | "Evidence"
@@ -102,6 +103,7 @@ type ArtifactTab =
   | "Trace";
 
 const artifactTabs: ArtifactTab[] = [
+  "Brief",
   "Memo",
   "Claims",
   "Evidence",
@@ -156,7 +158,7 @@ export function App() {
   const [bundle, setBundle] = useState<RunBundle | null>(null);
   const [review, setReview] = useState<StudioReview | null>(null);
   const [comparison, setComparison] = useState<RunComparison | null>(null);
-  const [activeTab, setActiveTab] = useState<ArtifactTab>("Memo");
+  const [activeTab, setActiveTab] = useState<ArtifactTab>("Brief");
   const [error, setError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isLoadingBundle, setIsLoadingBundle] = useState(false);
@@ -166,8 +168,6 @@ export function App() {
   const selectedProject = projects.find((project) => project.id === selectedProjectId);
   const selectedSourcePack = sourcePacks.find((pack) => pack.id === selectedSourcePackId);
   const canRun = form.question.trim().length > 0 && !isRunning;
-  const memoText = bundle?.memo ?? run?.memoPreview ?? "";
-  const memoSections = useMemo(() => memoText.split("\n\n").filter(Boolean), [memoText]);
   const visibleSourcePacks = useMemo(
     () =>
       sourcePacks.filter(
@@ -240,7 +240,7 @@ export function App() {
       });
       setRun(nextRun);
       setRuns((current) => upsertRun(current, nextRun));
-      setActiveTab("Memo");
+      setActiveTab("Brief");
       await loadBundle(nextRun.runId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Crux run failed.");
@@ -388,7 +388,7 @@ export function App() {
       const replayed = await replayRun(selectedRun.runId);
       setRuns((current) => upsertRun(current, replayed));
       setRun(replayed);
-      setActiveTab("Memo");
+      setActiveTab("Brief");
       await loadBundle(replayed.runId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Replay failed.");
@@ -421,7 +421,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.6 · workspace
+              v0.7 · workspace
             </p>
           </div>
         </div>
@@ -481,7 +481,7 @@ export function App() {
                     className="h-auto justify-start whitespace-normal px-3 py-2 text-left"
                     key={item.runId}
                     onClick={() => {
-                      setActiveTab("Memo");
+                      setActiveTab("Brief");
                       void loadBundle(item.runId);
                     }}
                     type="button"
@@ -621,7 +621,6 @@ export function App() {
             bundle={bundle}
             comparison={comparison}
             isLoadingBundle={isLoadingBundle}
-            memoSections={memoSections}
             review={review}
             selectedRun={selectedRun}
             onAnnotateEvidence={handleAnnotateEvidence}
@@ -994,7 +993,6 @@ function MemoPanel({
   bundle,
   comparison,
   isLoadingBundle,
-  memoSections,
   review,
   selectedRun,
   onAnnotateEvidence,
@@ -1007,7 +1005,6 @@ function MemoPanel({
   bundle: RunBundle | null;
   comparison: RunComparison | null;
   isLoadingBundle: boolean;
-  memoSections: string[];
   review: StudioReview | null;
   selectedRun: RunBundle | RunSummary | null;
   onAnnotateEvidence: (evidenceId: string) => void;
@@ -1021,10 +1018,10 @@ function MemoPanel({
       <CardHeader>
         <div>
           <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
-            Memo
+            Current run
           </p>
           <CardTitle className="mt-2 text-xl">
-            {selectedRun ? "Decision memo" : "No run yet"}
+            {selectedRun ? "Workbench" : "No run yet"}
           </CardTitle>
         </div>
         {selectedRun ? (
@@ -1056,9 +1053,6 @@ function MemoPanel({
       <CardContent>
         {selectedRun ? (
           <>
-            <div className="max-w-[68ch] space-y-5 text-[0.98rem] leading-7">
-              {memoSections.map((section) => renderMemoSection(section))}
-            </div>
             <ArtifactInspector
               activeTab={activeTab}
               bundle={bundle}
@@ -1122,11 +1116,118 @@ function ArtifactInspector({
                 <Skeleton className="h-16" />
               </div>
             ) : (
-              renderArtifactTab(tab, bundle, onReviewClaim, onAnnotateEvidence)
+              renderArtifactTab(tab, bundle, onReviewClaim, onAnnotateEvidence, onChangeTab)
             )}
           </TabsContent>
         ))}
       </Tabs>
+    </section>
+  );
+}
+
+function DecisionBrief({
+  memoText,
+  run,
+  onChangeTab,
+}: {
+  memoText: string;
+  run: RunBundle | RunSummary;
+  onChangeTab: (tab: ArtifactTab) => void;
+}) {
+  const recommendation =
+    extractMemoSection(memoText, "Recommendation") ||
+    firstMemoParagraph(memoText) ||
+    run.memoPreview;
+  const summary = extractMemoSection(memoText, "Executive Summary");
+  const nextActions = uniqueStrings([
+    run.readiness.nextAction,
+    run.agents?.nextActions[0],
+    ...(run.sourceWorkspace?.missingEvidence.slice(0, 2) ?? []),
+  ]).slice(0, 3);
+  const blockers = uniqueStrings([
+    ...run.trust.blockingIssues,
+    ...(run.agents?.blockingIssues ?? []),
+  ]).slice(0, 3);
+
+  return (
+    <section
+      aria-label="Decision brief"
+      className="grid gap-5 rounded-lg border bg-muted/20 p-4"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="max-w-[72ch]">
+          <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+            Answer first
+          </p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight">Decision brief</h2>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <ReadinessBadge status={run.readiness.status} />
+          <TrustBadge status={run.trust.status} />
+        </div>
+      </div>
+
+      <div className="max-w-[72ch] space-y-3">
+        <p className="text-base leading-7">{recommendation}</p>
+        {summary ? (
+          <p className="text-sm leading-6 text-muted-foreground">{truncateText(summary, 460)}</p>
+        ) : null}
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-md border bg-background p-3">
+          <p className="text-sm font-semibold">Review readiness</p>
+          <FactList
+            items={[
+              { label: "State", value: run.readiness.label },
+              { label: "Confidence", value: formatConfidence(run.trust.confidence) },
+              { label: "Sources", value: String(run.sourceWorkspace?.sourceCount ?? 0) },
+              { label: "Chunks", value: String(run.sourceWorkspace?.sourceChunkCount ?? 0) },
+            ]}
+          />
+        </div>
+
+        <div className="rounded-md border bg-background p-3">
+          <p className="text-sm font-semibold">Next action</p>
+          {nextActions.length ? (
+            <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-muted-foreground">
+              {nextActions.map((action) => (
+                <li key={action}>{action}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Review claims and export when approved.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {blockers.length ? (
+        <div className="rounded-md border border-amber-300 bg-amber-100 p-3 text-sm text-amber-950">
+          <p className="font-semibold">Trust blockers</p>
+          <ul className="mt-2 list-inside list-disc space-y-1">
+            {blockers.map((blocker) => (
+              <li key={blocker}>{blocker}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" type="button" variant="secondary" onClick={() => onChangeTab("Memo")}>
+          <NotebookText className="size-3.5" />
+          Open full memo
+        </Button>
+        <Button size="sm" type="button" variant="outline" onClick={() => onChangeTab("Claims")}>
+          <SearchCheck className="size-3.5" />
+          Inspect claims
+        </Button>
+        <Button size="sm" type="button" variant="outline" onClick={() => onChangeTab("Sources")}>
+          <FileText className="size-3.5" />
+          Inspect sources
+        </Button>
+      </div>
     </section>
   );
 }
@@ -1136,14 +1237,23 @@ function renderArtifactTab(
   bundle: RunBundle | null,
   onReviewClaim: (claimId: string, status: "approved" | "rejected") => void,
   onAnnotateEvidence: (evidenceId: string) => void,
+  onChangeTab: (tab: ArtifactTab) => void,
 ) {
   if (!bundle) {
     return <p className="text-sm text-muted-foreground">Select or create a run to inspect artifacts.</p>;
   }
 
   switch (tab) {
+    case "Brief":
+      return (
+        <DecisionBrief
+          memoText={bundle.memo}
+          run={bundle}
+          onChangeTab={onChangeTab}
+        />
+      );
     case "Memo":
-      return <JsonArtifact value={bundle.memo} />;
+      return <ReadableMemo memo={bundle.memo} />;
     case "Claims":
       return renderClaims(bundle.artifacts.claims, onReviewClaim);
     case "Evidence":
@@ -1714,6 +1824,16 @@ function CruxMark() {
   );
 }
 
+function ReadableMemo({ memo }: { memo: string }) {
+  const sections = memo.trim().split("\n\n").filter(Boolean);
+
+  return (
+    <div className="max-w-[68ch] space-y-5 text-[0.98rem] leading-7">
+      {sections.map((section) => renderMemoSection(section))}
+    </div>
+  );
+}
+
 function renderMemoSection(section: string) {
   if (section.startsWith("## ")) {
     return (
@@ -1737,6 +1857,49 @@ function renderMemoSection(section: string) {
   }
 
   return <p key={section}>{section}</p>;
+}
+
+function extractMemoSection(memo: string, heading: string): string {
+  const lines = memo.replace(/\r\n/g, "\n").split("\n");
+  const expectedHeading = `## ${heading}`.toLowerCase();
+  const start = lines.findIndex(
+    (line) => line.trim().toLowerCase() === expectedHeading,
+  );
+  if (start === -1) {
+    return "";
+  }
+
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => line.trim().startsWith("## "));
+  const sectionLines = end === -1 ? rest : rest.slice(0, end);
+  return normalizeMemoText(sectionLines.join("\n"));
+}
+
+function firstMemoParagraph(memo: string): string {
+  return memo
+    .replace(/\r\n/g, "\n")
+    .split(/\n\s*\n/)
+    .filter((paragraph) => !/^#+\s+[^\n]+$/.test(paragraph.trim()))
+    .map((paragraph) => normalizeMemoText(paragraph).replace(/^#+\s*/, "").trim())
+    .find(Boolean) ?? "";
+}
+
+function normalizeMemoText(value: string): string {
+  return value
+    .replace(/\r\n/g, "\n")
+    .replace(/^[-*]\s+/gm, "")
+    .replace(/^\d+\.\s+/gm, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function uniqueStrings(values: Array<string | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => Boolean(value?.trim())))];
+}
+
+function truncateText(value: string, maxLength: number): string {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3).trim()}...`;
 }
 
 function upsertRun(current: RunSummary[], run: RunSummary): RunSummary[] {

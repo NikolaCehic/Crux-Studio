@@ -1,5 +1,37 @@
 # Trace Log
 
+## 2026-05-02T19:14:25+02:00 - Phase 10 Answer-First Decision Brief
+
+Intent:
+
+- Implement the next productization phase under the required phase contract: full implementation, E2E/smoke tests, spec validation, artifacts, and next-phase handoff.
+- Make Studio land on a readable decision answer first while preserving the full auditable run.
+
+Implemented:
+
+- Added a `Brief` artifact tab and made it the default tab for latest-run preload, new runs, replayed runs, and history selection.
+- Added a decision brief surface with recommendation, optional executive summary, readiness, trust confidence, source counts, next action, and blockers.
+- Added brief actions for opening the full memo, inspecting claims, and inspecting sources.
+- Changed the full memo artifact from raw string JSON to a readable memo view.
+- Tightened workbench copy so the page title and the decision brief do not repeat each other.
+- Refreshed `docs/assets/crux-studio-workbench.png` from the running v0.7 Studio UI.
+- Added `docs/PHASE_10_ANSWER_FIRST_DECISION_BRIEF_SPEC.md`.
+
+Verification:
+
+- Failing web workflow expectations were written first and passed after implementation.
+- Focused web E2E-style test passed: `pnpm --filter @crux-studio/web test -- src/App.test.tsx`.
+- Web TypeScript check passed: `pnpm --filter @crux-studio/web check`.
+- Full Studio verification passed: `pnpm verify`.
+- Local smoke passed against the real local Harness provider: `pnpm smoke:local`.
+- Visual artifact refreshed with headless Chrome: `docs/assets/crux-studio-workbench.png`.
+- Final smoke result: source-backed run `20260502T172025Z-how-should-a-support-team-reduce-first-response-`; readiness `usable_with_warnings`; 2 sources; 4 source chunks.
+
+Result:
+
+- Phase 10 is done.
+- Next phase: Phase 11 Async Run Lifecycle.
+
 ## 2026-05-02T19:01:00+02:00 - Phase 09 Source File Upload Workspace
 
 Intent:

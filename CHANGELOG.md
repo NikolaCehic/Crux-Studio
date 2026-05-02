@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0 - 2026-05-02
+
+- Added an answer-first `Brief` artifact tab as the default landing surface for latest, new, replayed, and selected runs.
+- Added a decision brief with recommendation, summary, readiness, trust confidence, source counts, next action, and blockers.
+- Kept full memo inspection available as a readable memo tab instead of raw string JSON.
+- Added direct brief actions for opening the full memo, inspecting claims, and inspecting sources.
+- Updated web workflow coverage to prove returning users land on the decision brief and can open the full memo.
+- Refreshed the primary README workbench screenshot from the v0.7 answer-first UI.
+- Added the Phase 10 answer-first decision brief spec artifact.
+
 ## 0.6.0 - 2026-05-02
 
 - Added multi-file source attachment in the Studio ask panel for Markdown, TXT, and CSV source files.
