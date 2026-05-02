@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.0 - 2026-05-02
+
+- Added an async run lifecycle API with queued, running, completed, failed, cancelled, and retry states.
+- Added server lifecycle endpoints for creating, listing, inspecting, cancelling, and retrying run jobs.
+- Preserved the synchronous `/api/runs/ask` endpoint for compatibility.
+- Added `lifecycle` to provider capability reporting.
+- Updated Studio to submit new questions through lifecycle jobs, poll completion, and load the finished run automatically.
+- Added lifecycle status UI in the ask panel and inspector, including cancel and retry controls.
+- Updated local smoke to validate a source-backed local Harness run through the lifecycle API.
+- Added the Phase 11 async run lifecycle spec artifact.
+
 ## 0.7.0 - 2026-05-02
 
 - Added an answer-first `Brief` artifact tab as the default landing surface for latest, new, replayed, and selected runs.

@@ -15,8 +15,12 @@ import type {
 } from "@crux-studio/crux-provider";
 import {
   AlertTriangle,
+  Ban,
   Boxes,
   Check,
+  CircleCheck,
+  CircleDashed,
+  CircleX,
   Download,
   FileJson,
   FileText,
@@ -24,6 +28,7 @@ import {
   NotebookText,
   Play,
   Plus,
+  RefreshCw,
   RotateCcw,
   SearchCheck,
   ShieldCheck,
@@ -55,21 +60,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   annotateEvidence,
-  askCrux,
+  cancelRunJob,
   compareRuns,
   createProject,
   createSourcePack,
+  getRunJob,
   getRun,
   listDemos,
   listProjects,
   listProviders,
+  listRunJobs,
   listRuns,
   listSourcePacks,
   replayRun,
+  retryRunJob,
   reviewClaim,
+  startRunJob,
   type ProviderRegistry,
   type DemoQuestion,
   type RunComparison,
+  type RunJob,
   type StudioProject,
   type StudioReview,
   type StudioSourcePack,
@@ -158,6 +168,8 @@ export function App() {
   const [bundle, setBundle] = useState<RunBundle | null>(null);
   const [review, setReview] = useState<StudioReview | null>(null);
   const [comparison, setComparison] = useState<RunComparison | null>(null);
+  const [jobs, setJobs] = useState<RunJob[]>([]);
+  const [activeJob, setActiveJob] = useState<RunJob | null>(null);
   const [activeTab, setActiveTab] = useState<ArtifactTab>("Brief");
   const [error, setError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
@@ -167,7 +179,8 @@ export function App() {
   const activeProvider = providers[0];
   const selectedProject = projects.find((project) => project.id === selectedProjectId);
   const selectedSourcePack = sourcePacks.find((pack) => pack.id === selectedSourcePackId);
-  const canRun = form.question.trim().length > 0 && !isRunning;
+  const isJobPending = activeJob ? isPendingJob(activeJob.status) : false;
+  const canRun = form.question.trim().length > 0 && !isRunning && !isJobPending;
   const visibleSourcePacks = useMemo(
     () =>
       sourcePacks.filter(
@@ -185,14 +198,17 @@ export function App() {
       listSourcePacks(),
       listProviders(),
       listDemos(),
+      listRunJobs(),
     ])
-      .then(([history, loadedProjects, loadedSourcePacks, registry, loadedDemos]) => {
+      .then(([history, loadedProjects, loadedSourcePacks, registry, loadedDemos, loadedJobs]) => {
         if (!cancelled) {
           setRuns(history);
           setProjects(loadedProjects);
           setSourcePacks(loadedSourcePacks);
           setProviders(registry.providers);
           setDemos(loadedDemos);
+          setJobs(loadedJobs);
+          setActiveJob((current) => current ?? loadedJobs[0] ?? null);
           setSelectedProjectId(loadedProjects[0]?.id ?? "");
           setSelectedSourcePackId(
             loadedSourcePacks.find(
@@ -218,6 +234,39 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!activeJob || !isPendingJob(activeJob.status)) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const jobId = activeJob.jobId;
+
+    async function pollJob() {
+      try {
+        const nextJob = await getRunJob(jobId);
+        if (cancelled) {
+          return;
+        }
+
+        await applyRunJob(nextJob);
+      } catch (caught) {
+        if (!cancelled) {
+          setError(caught instanceof Error ? caught.message : "Run job failed to load.");
+        }
+      }
+    }
+
+    void pollJob();
+    const intervalId = window.setInterval(() => void pollJob(), 1200);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeJob?.jobId, activeJob?.status]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -230,7 +279,7 @@ export function App() {
     setError(null);
 
     try {
-      const nextRun = await askCrux({
+      const nextJob = await startRunJob({
         question: form.question,
         context: form.context,
         timeHorizon: form.timeHorizon,
@@ -238,14 +287,30 @@ export function App() {
         projectId: selectedProjectId || undefined,
         sourcePackId: selectedSourcePackId || undefined,
       });
-      setRun(nextRun);
-      setRuns((current) => upsertRun(current, nextRun));
+      setActiveJob(nextJob);
+      setJobs((current) => upsertJob(current, nextJob));
       setActiveTab("Brief");
-      await loadBundle(nextRun.runId);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Crux run failed.");
+      setError(caught instanceof Error ? caught.message : "Run job failed to start.");
     } finally {
       setIsRunning(false);
+    }
+  }
+
+  async function applyRunJob(nextJob: RunJob) {
+    setActiveJob(nextJob);
+    setJobs((current) => upsertJob(current, nextJob));
+
+    if (nextJob.status === "succeeded" && nextJob.run) {
+      setRun(nextJob.run);
+      setRuns((current) => upsertRun(current, nextJob.run as RunSummary));
+      setActiveTab("Brief");
+      setError(null);
+      await loadBundle(nextJob.run.runId);
+    } else if (nextJob.status === "failed") {
+      setError(nextJob.error ?? "Run job failed.");
+    } else if (nextJob.status === "cancelled") {
+      setError(null);
     }
   }
 
@@ -395,6 +460,26 @@ export function App() {
     }
   }
 
+  async function handleCancelJob(jobId: string) {
+    try {
+      await applyRunJob(await cancelRunJob(jobId));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Run job cancellation failed.");
+    }
+  }
+
+  async function handleRetryJob(jobId: string) {
+    try {
+      const nextJob = await retryRunJob(jobId);
+      setActiveJob(nextJob);
+      setJobs((current) => upsertJob(current, nextJob));
+      setActiveTab("Brief");
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Run job retry failed.");
+    }
+  }
+
   async function handleCompareLatest() {
     if (runs.length < 2) {
       setError("At least two runs are required for comparison.");
@@ -421,7 +506,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.7 · workspace
+              v0.8 · workspace
             </p>
           </div>
         </div>
@@ -593,6 +678,7 @@ export function App() {
 
         <section className="grid gap-6 p-4 xl:grid-cols-[minmax(300px,390px)_minmax(0,1fr)] xl:p-8" id="ask">
           <RunForm
+            activeJob={activeJob}
             canRun={canRun}
             demos={demos}
             error={error}
@@ -605,6 +691,7 @@ export function App() {
             sourceFiles={sourceFiles}
             sourcePackName={sourcePackName}
             visibleSourcePacks={visibleSourcePacks}
+            onCancelJob={(jobId) => void handleCancelJob(jobId)}
             onCreateSourcePack={() => void handleCreateSourcePack()}
             onClearSourceFiles={() => setSourceFiles([])}
             onFormChange={setForm}
@@ -613,6 +700,7 @@ export function App() {
             onSetSourcePackName={setSourcePackName}
             onSetSourcePackId={setSelectedSourcePackId}
             onSubmit={handleSubmit}
+            onRetryJob={(jobId) => void handleRetryJob(jobId)}
             onUseDemo={handleUseDemo}
           />
 
@@ -636,6 +724,16 @@ export function App() {
         aria-label="Run inspector"
         className="grid gap-4 border-t bg-sidebar p-4 text-sidebar-foreground lg:sticky lg:top-0 lg:h-svh lg:overflow-y-auto lg:border-l lg:border-t-0"
       >
+        <InspectorCard label="Lifecycle">
+          <RunLifecyclePanel
+            compact
+            job={activeJob}
+            recentJobs={jobs.slice(0, 4)}
+            onCancelJob={(jobId) => void handleCancelJob(jobId)}
+            onRetryJob={(jobId) => void handleRetryJob(jobId)}
+          />
+        </InspectorCard>
+
         <InspectorCard label="Readiness">
           <ReadinessCard run={selectedRun} />
         </InspectorCard>
@@ -738,6 +836,7 @@ export function App() {
 }
 
 function RunForm({
+  activeJob,
   canRun,
   demos,
   error,
@@ -750,6 +849,7 @@ function RunForm({
   sourceFiles,
   sourcePackName,
   visibleSourcePacks,
+  onCancelJob,
   onCreateSourcePack,
   onClearSourceFiles,
   onFormChange,
@@ -758,8 +858,10 @@ function RunForm({
   onSetSourcePackId,
   onSetSourcePackName,
   onSubmit,
+  onRetryJob,
   onUseDemo,
 }: {
+  activeJob: RunJob | null;
   canRun: boolean;
   demos: DemoQuestion[];
   error: string | null;
@@ -772,6 +874,7 @@ function RunForm({
   sourceFiles: SourceDraftFile[];
   sourcePackName: string;
   visibleSourcePacks: StudioSourcePack[];
+  onCancelJob: (jobId: string) => void;
   onCreateSourcePack: () => void;
   onClearSourceFiles: () => void;
   onFormChange: Dispatch<SetStateAction<AskFormState>>;
@@ -780,6 +883,7 @@ function RunForm({
   onSetSourcePackId: (value: string) => void;
   onSetSourcePackName: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onRetryJob: (jobId: string) => void;
   onUseDemo: (demo: DemoQuestion) => void;
 }) {
   const sourceFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -973,6 +1077,13 @@ function RunForm({
               </Button>
             </div>
 
+            <RunLifecyclePanel
+              job={activeJob}
+              recentJobs={[]}
+              onCancelJob={onCancelJob}
+              onRetryJob={onRetryJob}
+            />
+
             {error ? <FieldError>{error}</FieldError> : null}
 
             <div className="flex justify-end">
@@ -985,6 +1096,114 @@ function RunForm({
         </CardContent>
       </Card>
     </form>
+  );
+}
+
+function RunLifecyclePanel({
+  compact = false,
+  job,
+  recentJobs,
+  onCancelJob,
+  onRetryJob,
+}: {
+  compact?: boolean;
+  job: RunJob | null;
+  recentJobs: RunJob[];
+  onCancelJob: (jobId: string) => void;
+  onRetryJob: (jobId: string) => void;
+}) {
+  const failedJobs = recentJobs
+    .filter((item) => item.status === "failed" || item.status === "cancelled")
+    .filter((item) => item.jobId !== job?.jobId)
+    .slice(0, compact ? 2 : 1);
+
+  return (
+    <section
+      aria-label="Run lifecycle"
+      className={cn("grid gap-3 rounded-lg border bg-muted/25 p-3", compact && "border-0 bg-transparent p-0")}
+    >
+      {!compact ? (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold">Run lifecycle</p>
+          {job ? <RunJobBadge status={job.status} /> : null}
+        </div>
+      ) : null}
+
+      {job ? (
+        <div className="grid gap-2">
+          {compact ? (
+            <div className="grid gap-1">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold">Active job</p>
+                <RunJobBadge status={job.status} />
+              </div>
+              <p className="line-clamp-1 break-all font-mono text-xs text-muted-foreground">
+                {job.run?.runId ?? job.jobId}
+              </p>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold">Run state</p>
+              <RunJobBadge status={job.status} />
+            </div>
+          )}
+          {!compact ? (
+            <FactList
+              mono
+              items={[
+                { label: "Status", value: runJobLabel(job.status) },
+                { label: "Job", value: job.jobId },
+                { label: "Question", value: job.input.question },
+                ...(job.run ? [{ label: "Run", value: job.run.runId }] : []),
+                ...(job.error ? [{ label: "Note", value: job.error }] : []),
+              ]}
+            />
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {isPendingJob(job.status) ? (
+              <Button size="sm" type="button" variant="outline" onClick={() => onCancelJob(job.jobId)}>
+                <Ban className="size-3.5" />
+                Cancel run
+              </Button>
+            ) : null}
+            {job.status === "failed" || job.status === "cancelled" ? (
+              <Button size="sm" type="button" variant="secondary" onClick={() => onRetryJob(job.jobId)}>
+                <RefreshCw className="size-3.5" />
+                Retry run
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Run jobs will appear here while Crux is queued, running, complete, failed, or cancelled.
+        </p>
+      )}
+
+      {failedJobs.length ? (
+        <div className="grid gap-2 border-t pt-3">
+          <p className="text-xs font-semibold uppercase text-muted-foreground">Needs action</p>
+          {failedJobs.map((item) => (
+            <div className="grid gap-2 rounded-md border bg-background p-2" key={item.jobId}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="line-clamp-1 text-sm">{item.input.question}</span>
+                <RunJobBadge status={item.status} />
+              </div>
+              <Button
+                className="justify-self-start"
+                size="sm"
+                type="button"
+                variant="secondary"
+                onClick={() => onRetryJob(item.jobId)}
+              >
+                <RefreshCw className="size-3.5" />
+                Retry run
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -1779,6 +1998,31 @@ function ItemMediaIcon({ icon: Icon }: { icon: typeof SearchCheck }) {
   );
 }
 
+function RunJobBadge({ status }: { status: RunJob["status"] }) {
+  const statusClasses: Record<RunJob["status"], string> = {
+    queued: "border-sky-300 bg-sky-100 text-sky-900",
+    running: "border-blue-300 bg-blue-100 text-blue-900",
+    succeeded: "border-emerald-300 bg-emerald-100 text-emerald-900",
+    failed: "border-red-300 bg-red-100 text-red-900",
+    cancelled: "border-muted bg-muted text-muted-foreground",
+  };
+  const icons: Record<RunJob["status"], typeof CircleDashed> = {
+    queued: CircleDashed,
+    running: Sparkles,
+    succeeded: CircleCheck,
+    failed: CircleX,
+    cancelled: Ban,
+  };
+  const Icon = icons[status];
+
+  return (
+    <Badge className={cn("shrink-0 gap-1.5", statusClasses[status])} variant="outline">
+      <Icon className="size-3" />
+      {runJobLabel(status)}
+    </Badge>
+  );
+}
+
 function TrustBadge({ status }: { status: string }) {
   const statusClasses: Record<string, string> = {
     pass: "border-emerald-300 bg-emerald-100 text-emerald-900",
@@ -1902,8 +2146,28 @@ function truncateText(value: string, maxLength: number): string {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3).trim()}...`;
 }
 
+function isPendingJob(status: RunJob["status"]): boolean {
+  return status === "queued" || status === "running";
+}
+
+function runJobLabel(status: RunJob["status"]): string {
+  const labels: Record<RunJob["status"], string> = {
+    queued: "Queued",
+    running: "Running",
+    succeeded: "Completed",
+    failed: "Failed",
+    cancelled: "Cancelled",
+  };
+
+  return labels[status];
+}
+
 function upsertRun(current: RunSummary[], run: RunSummary): RunSummary[] {
   return [run, ...current.filter((item) => item.runId !== run.runId)];
+}
+
+function upsertJob(current: RunJob[], job: RunJob): RunJob[] {
+  return [job, ...current.filter((item) => item.jobId !== job.jobId)];
 }
 
 function upsertById<T extends { id: string }>(current: T[], item: T): T[] {

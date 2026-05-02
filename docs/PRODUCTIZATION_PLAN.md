@@ -222,7 +222,7 @@ The first implementation slice is Phase 2 plus the first part of Phase 3:
 
 ## Local-First Implementation Status
 
-Implemented in Studio v0.4 through v0.7:
+Implemented in Studio v0.4 through v0.8:
 
 - Phase 1: canonical demo questions are exposed through `/api/demos` and the ask panel.
 - Phase 2: the provider boundary carries readiness, Harness version, source summaries, bounded agents, source inventory, source chunks, and eval reports.
@@ -235,6 +235,7 @@ Implemented in Studio v0.4 through v0.7:
 - Productization bridge: Studio v0.5 now materializes uploaded source-pack files into local Harness source packs before asking, so arbitrary-question runs produce real `source_inventory.json` and `source_chunks.json` instead of relying on pasted context.
 - Phase 09: Studio v0.6 adds multi-file Markdown, TXT, and CSV selection for source-pack creation while preserving the pasted-source fallback.
 - Phase 10: Studio v0.7 adds an answer-first decision brief as the default run surface, while keeping the full memo and structured artifacts one click away.
+- Phase 11: Studio v0.8 adds an async lifecycle layer for new runs, including queued, running, completed, failed, cancelled, and retry states.
 
 Still deferred:
 

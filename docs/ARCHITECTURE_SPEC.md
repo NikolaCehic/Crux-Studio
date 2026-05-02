@@ -130,6 +130,11 @@ Initial endpoints:
 
 ```text
 POST   /api/runs/ask
+POST   /api/runs/jobs
+GET    /api/runs/jobs
+GET    /api/runs/jobs/:jobId
+POST   /api/runs/jobs/:jobId/cancel
+POST   /api/runs/jobs/:jobId/retry
 GET    /api/runs
 GET    /api/runs/:runId
 GET    /api/runs/:runId/artifacts/:artifact

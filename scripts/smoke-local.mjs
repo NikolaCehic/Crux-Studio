@@ -21,6 +21,23 @@ async function postJson(url, body) {
   return response.json();
 }
 
+async function waitForJob(jobId) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const job = await getJson(`${serverUrl}/api/runs/jobs/${jobId}`);
+    if (job.status === "succeeded") {
+      return job;
+    }
+
+    if (job.status === "failed" || job.status === "cancelled") {
+      throw new Error(`Lifecycle job ${jobId} ended with ${job.status}: ${job.error ?? "no error"}`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  throw new Error(`Lifecycle job ${jobId} did not finish in time.`);
+}
+
 async function main() {
   const [health, providers, demos, runs] = await Promise.all([
     getJson(`${serverUrl}/health`),
@@ -55,7 +72,7 @@ async function main() {
       },
     ],
   });
-  const sourceBackedRun = await postJson(`${serverUrl}/api/runs/ask`, {
+  const sourceBackedJob = await postJson(`${serverUrl}/api/runs/jobs`, {
     projectId: project.id,
     sourcePackId: sourcePack.id,
     question: "How should a support team reduce first-response time without hiring more agents this month?",
@@ -63,6 +80,11 @@ async function main() {
     timeHorizon: "30 days",
     sourcePolicy: "offline",
   });
+  const completedSourceBackedJob = await waitForJob(sourceBackedJob.jobId);
+  const sourceBackedRun = completedSourceBackedJob.run;
+  if (!sourceBackedRun?.runId) {
+    throw new Error(`Lifecycle job ${sourceBackedJob.jobId} did not return a run.`);
+  }
   const sourceBackedBundle = await getJson(`${serverUrl}/api/runs/${sourceBackedRun.runId}`);
   const sourceCount = sourceBackedBundle.sourceWorkspace?.sourceCount ?? 0;
   const sourceChunkCount = sourceBackedBundle.sourceWorkspace?.sourceChunkCount ?? 0;
@@ -86,6 +108,8 @@ async function main() {
       : null,
     sourceBackedRun: {
       runId: sourceBackedRun.runId,
+      jobId: sourceBackedJob.jobId,
+      jobStatus: completedSourceBackedJob.status,
       readiness: sourceBackedRun.readiness?.status,
       sourceCount,
       sourceChunkCount,

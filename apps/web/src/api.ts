@@ -48,6 +48,21 @@ export type DemoQuestion = {
   sourcePolicy: "offline" | "hybrid" | "web";
 };
 
+export type RunJobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+
+export type RunJob = {
+  jobId: string;
+  status: RunJobStatus;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  retryOf?: string;
+  input: AskInput;
+  run?: RunSummary;
+  error?: string;
+};
+
 export async function askCrux(input: AskInput): Promise<RunSummary> {
   const response = await fetch("/api/runs/ask", {
     method: "POST",
@@ -61,6 +76,26 @@ export async function askCrux(input: AskInput): Promise<RunSummary> {
   }
 
   return (await response.json()) as RunSummary;
+}
+
+export async function startRunJob(input: AskInput): Promise<RunJob> {
+  return postJson("/api/runs/jobs", input, "Run job failed to start.");
+}
+
+export async function listRunJobs(): Promise<RunJob[]> {
+  return getJson("/api/runs/jobs", "Run lifecycle failed to load.");
+}
+
+export async function getRunJob(jobId: string): Promise<RunJob> {
+  return getJson(`/api/runs/jobs/${jobId}`, "Run job failed to load.");
+}
+
+export async function cancelRunJob(jobId: string): Promise<RunJob> {
+  return postJson(`/api/runs/jobs/${jobId}/cancel`, {}, "Run job cancellation failed.");
+}
+
+export async function retryRunJob(jobId: string): Promise<RunJob> {
+  return postJson(`/api/runs/jobs/${jobId}/retry`, {}, "Run job retry failed.");
 }
 
 export async function listProjects(): Promise<StudioProject[]> {

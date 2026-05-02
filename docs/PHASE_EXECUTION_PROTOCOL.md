@@ -16,15 +16,16 @@ Every phase must complete these steps before it is considered done:
 
 - Phase 09: Source File Upload Workspace, implemented in Studio v0.6.
 - Phase 10: Answer-First Decision Brief, implemented in Studio v0.7.
+- Phase 11: Async Run Lifecycle, implemented in Studio v0.8.
 
 ## Next Phase
 
-Phase 11: Async Run Lifecycle.
+Phase 12: Durable Lifecycle Recovery.
 
 Goal:
 
-- Make long-running local Harness work feel controlled and observable from Studio.
+- Make local lifecycle jobs recoverable across server restarts and preserve completed, failed, cancelled, and retryable job history.
 
 Why this is next:
 
-- The answer-first workbench now makes completed runs usable. The next product risk is run lifecycle control: users need clear pending, running, completed, failed, retry, and cancellation states before Crux feels dependable for heavier real-world runs.
+- Studio now has a lifecycle layer while the server process is alive. The next reliability gap is durability: serious local workflows should not lose job history or retry context when the server restarts.

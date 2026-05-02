@@ -1,5 +1,42 @@
 # Trace Log
 
+## 2026-05-02T19:34:32+02:00 - Phase 11 Async Run Lifecycle
+
+Intent:
+
+- Implement the next productization phase under the required phase contract: full implementation, E2E/smoke tests, spec validation, artifacts, and next-phase handoff.
+- Make long-running Harness runs observable and controllable from Studio.
+
+Implemented:
+
+- Added an in-process server run-job queue with queued, running, succeeded, failed, cancelled, and retry states.
+- Added lifecycle endpoints for creating, listing, inspecting, cancelling, and retrying run jobs.
+- Preserved the synchronous `/api/runs/ask` endpoint for compatibility.
+- Added `lifecycle` to provider capability reporting.
+- Updated Studio to submit new questions through lifecycle jobs and poll the active job to completion.
+- Added lifecycle UI in the ask panel and right inspector with cancel and retry controls.
+- Kept the previous completed run visible while a new job is queued or running.
+- Updated local smoke to validate a source-backed local Harness run through the lifecycle API.
+- Added `docs/PHASE_11_ASYNC_RUN_LIFECYCLE_SPEC.md`.
+
+Verification:
+
+- Failing server lifecycle and web workflow expectations were written first and passed after implementation.
+- Focused server lifecycle test passed: `pnpm --filter @crux-studio/server test -- src/app.test.ts`.
+- Focused web E2E-style test passed: `pnpm --filter @crux-studio/web test -- src/App.test.tsx`.
+- Focused web check passed: `pnpm --filter @crux-studio/web check`.
+- Full Studio verification passed: `pnpm verify`.
+- Local lifecycle smoke passed: `pnpm smoke:local`.
+- Final smoke job: `job-20260502174340-41838b6d`.
+- Final smoke run: `20260502T174340Z-how-should-a-support-team-reduce-first-response-`.
+- Final smoke result: `succeeded`, with 2 sources and 4 source chunks.
+- Refreshed README workbench screenshot: `docs/assets/crux-studio-workbench.png`.
+
+Result:
+
+- Phase 11 is done.
+- Next phase: Phase 12 Durable Lifecycle Recovery.
+
 ## 2026-05-02T19:14:25+02:00 - Phase 10 Answer-First Decision Brief
 
 Intent:

@@ -218,12 +218,79 @@ const replayedBundle = {
   review: mockReview,
 };
 
+const mockQueuedJob = {
+  jobId: "job-mock-ask",
+  status: "queued",
+  createdAt: "2026-05-01T10:00:00.000Z",
+  updatedAt: "2026-05-01T10:00:00.000Z",
+  input: {
+    question: mockRun.question,
+    context: "No new hiring this month.",
+    timeHorizon: "30 days",
+    sourcePolicy: "offline",
+  },
+};
+
+const mockCompletedJob = {
+  ...mockQueuedJob,
+  status: "succeeded",
+  startedAt: "2026-05-01T10:00:01.000Z",
+  finishedAt: "2026-05-01T10:00:02.000Z",
+  updatedAt: "2026-05-01T10:00:02.000Z",
+  run: mockRun,
+};
+
+const mockFailedJob = {
+  ...mockQueuedJob,
+  jobId: "job-failed",
+  status: "failed",
+  error: "Provider timed out.",
+};
+
 describe("Crux Studio Ask workflow", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
+
+        if (url.endsWith("/api/runs/jobs") && init?.method === "POST") {
+          return new Response(JSON.stringify(mockQueuedJob), {
+            status: 202,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url.endsWith("/api/runs/jobs/job-mock-ask/cancel")) {
+          return new Response(JSON.stringify({ ...mockQueuedJob, status: "cancelled" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url.endsWith("/api/runs/jobs/job-failed/retry")) {
+          return new Response(
+            JSON.stringify({ ...mockQueuedJob, jobId: "job-retry", retryOf: "job-failed" }),
+            {
+              status: 202,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        if (url.endsWith("/api/runs/jobs/job-mock-ask") || url.endsWith("/api/runs/jobs/job-retry")) {
+          return new Response(JSON.stringify(mockCompletedJob), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url.endsWith("/api/runs/jobs")) {
+          return new Response(JSON.stringify([mockFailedJob]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
 
         if (url.endsWith("/api/runs/ask")) {
           return new Response(JSON.stringify(mockRun), {
@@ -267,7 +334,7 @@ describe("Crux Studio Ask workflow", () => {
                 {
                   id: "mock",
                   status: "active",
-                  capabilities: ["ask", "inspect", "sources", "review", "compare", "agents"],
+                  capabilities: ["ask", "inspect", "sources", "review", "compare", "agents", "lifecycle"],
                 },
               ],
             }),
@@ -376,11 +443,14 @@ describe("Crux Studio Ask workflow", () => {
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
-        "/api/runs/ask",
+        "/api/runs/jobs",
         expect.objectContaining({ method: "POST" }),
       );
     });
 
+    expect((await screen.findAllByText("Completed")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Run lifecycle")).toBeInTheDocument();
+    expect(screen.getAllByText("Retry run").length).toBeGreaterThan(0);
     expect(await screen.findByText("Trust gate")).toBeInTheDocument();
     expect(screen.getAllByText("Usable with warnings").length).toBeGreaterThan(0);
     expect(screen.getAllByText("warn").length).toBeGreaterThan(0);
