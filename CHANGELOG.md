@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 - 2026-05-02
+
+- Added multi-file source attachment in the Studio ask panel for Markdown, TXT, and CSV source files.
+- Displayed selected source file names and sizes before source-pack creation.
+- Sent uploaded file names and contents through the existing source-pack API instead of forcing users to paste one source blob.
+- Added UI workflow coverage proving selected files become source-pack API payloads.
+- Added phase execution protocol and Phase 09 source-upload spec artifacts.
+
 ## 0.5.0 - 2026-05-02
 
 - Materialized Studio source-pack files into real local Crux Harness source packs before running arbitrary questions.

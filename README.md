@@ -101,7 +101,7 @@ Studio supports replaying a run with the same question and context, comparing th
 
 - Ask arbitrary analysis and decision questions.
 - Organize work into projects.
-- Create source packs from pasted Markdown, TXT, or CSV-style material.
+- Create source packs from pasted material or selected Markdown, TXT, and CSV files.
 - Attach source packs to runs.
 - Materialize attached source packs into real local Crux Harness source packs, inventories, and chunks.
 - Reopen the latest run automatically when returning to the workspace.
@@ -260,6 +260,7 @@ It is intentionally not a hosted team control plane yet. Authentication, teams, 
 - [Architecture spec](docs/ARCHITECTURE_SPEC.md)
 - [Phased plan](docs/PHASED_PLAN.md)
 - [Productization plan](docs/PRODUCTIZATION_PLAN.md)
+- [Phase execution protocol](docs/PHASE_EXECUTION_PROTOCOL.md)
 - [Demo guide](docs/DEMO_GUIDE.md)
 - [Trace log](docs/TRACE_LOG.md)
 - [Changelog](CHANGELOG.md)

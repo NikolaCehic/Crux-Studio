@@ -5,6 +5,7 @@ import {
   type SetStateAction,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type {
@@ -82,6 +83,12 @@ type AskFormState = {
   sourcePolicy: SourcePolicy;
 };
 
+type SourceDraftFile = {
+  name: string;
+  content: string;
+  size: number;
+};
+
 type ArtifactTab =
   | "Memo"
   | "Claims"
@@ -144,6 +151,7 @@ export function App() {
   const [sourceDraft, setSourceDraft] = useState(
     "# Source note\n\nPaste Markdown, TXT, or CSV evidence here.",
   );
+  const [sourceFiles, setSourceFiles] = useState<SourceDraftFile[]>([]);
   const [run, setRun] = useState<RunSummary | null>(null);
   const [bundle, setBundle] = useState<RunBundle | null>(null);
   const [review, setReview] = useState<StudioReview | null>(null);
@@ -288,8 +296,12 @@ export function App() {
 
   async function handleCreateSourcePack() {
     try {
-      if (!sourcePackName.trim() || !sourceDraft.trim()) {
-        setError("Source pack name and content are required.");
+      const files = sourceFiles.length
+        ? sourceFiles.map((file) => ({ name: file.name, content: file.content }))
+        : [{ name: "studio-source.md", content: sourceDraft.trim() }];
+
+      if (!sourcePackName.trim() || files.every((file) => !file.content.trim())) {
+        setError("Source pack name and at least one source file or pasted source are required.");
         return;
       }
 
@@ -301,7 +313,7 @@ export function App() {
         const pack = await createSourcePack({
           projectId: project.id,
           name: sourcePackName.trim(),
-          files: [{ name: "studio-source.md", content: sourceDraft.trim() }],
+          files,
         });
         setSourcePacks((current) => upsertById(current, pack));
         setSelectedSourcePackId(pack.id);
@@ -311,13 +323,28 @@ export function App() {
       const pack = await createSourcePack({
         projectId,
         name: sourcePackName.trim(),
-        files: [{ name: "studio-source.md", content: sourceDraft.trim() }],
+        files,
       });
       setSourcePacks((current) => upsertById(current, pack));
       setSelectedSourcePackId(pack.id);
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Source pack creation failed.");
+    }
+  }
+
+  async function handleSelectSourceFiles(files: FileList | null) {
+    const selectedFiles = Array.from(files ?? []);
+    if (selectedFiles.length === 0) {
+      setSourceFiles([]);
+      return;
+    }
+
+    try {
+      setSourceFiles(await Promise.all(selectedFiles.map(readSourceDraftFile)));
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Source files failed to load.");
     }
   }
 
@@ -394,7 +421,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.5 · workspace
+              v0.6 · workspace
             </p>
           </div>
         </div>
@@ -575,10 +602,13 @@ export function App() {
             selectedProjectName={selectedProject?.name ?? "workspace"}
             selectedSourcePackId={selectedSourcePackId}
             sourceDraft={sourceDraft}
+            sourceFiles={sourceFiles}
             sourcePackName={sourcePackName}
             visibleSourcePacks={visibleSourcePacks}
             onCreateSourcePack={() => void handleCreateSourcePack()}
+            onClearSourceFiles={() => setSourceFiles([])}
             onFormChange={setForm}
+            onSelectSourceFiles={(files) => void handleSelectSourceFiles(files)}
             onSetSourceDraft={setSourceDraft}
             onSetSourcePackName={setSourcePackName}
             onSetSourcePackId={setSelectedSourcePackId}
@@ -718,10 +748,13 @@ function RunForm({
   selectedProjectName,
   selectedSourcePackId,
   sourceDraft,
+  sourceFiles,
   sourcePackName,
   visibleSourcePacks,
   onCreateSourcePack,
+  onClearSourceFiles,
   onFormChange,
+  onSelectSourceFiles,
   onSetSourceDraft,
   onSetSourcePackId,
   onSetSourcePackName,
@@ -737,16 +770,21 @@ function RunForm({
   selectedProjectName: string;
   selectedSourcePackId: string;
   sourceDraft: string;
+  sourceFiles: SourceDraftFile[];
   sourcePackName: string;
   visibleSourcePacks: StudioSourcePack[];
   onCreateSourcePack: () => void;
+  onClearSourceFiles: () => void;
   onFormChange: Dispatch<SetStateAction<AskFormState>>;
+  onSelectSourceFiles: (files: FileList | null) => void;
   onSetSourceDraft: (value: string) => void;
   onSetSourcePackId: (value: string) => void;
   onSetSourcePackName: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onUseDemo: (demo: DemoQuestion) => void;
 }) {
+  const sourceFileInputRef = useRef<HTMLInputElement | null>(null);
+
   return (
     <form className="self-start" onSubmit={onSubmit}>
       <Card>
@@ -877,6 +915,50 @@ function RunForm({
                   onChange={(event) => onSetSourcePackName(event.target.value)}
                 />
               </Field>
+              <Field>
+                <FieldLabel htmlFor="sourceFiles">Attach source files</FieldLabel>
+                <Input
+                  accept=".md,.markdown,.txt,.csv,text/markdown,text/plain,text/csv"
+                  id="sourceFiles"
+                  multiple
+                  ref={sourceFileInputRef}
+                  type="file"
+                  onChange={(event) => onSelectSourceFiles(event.currentTarget.files)}
+                />
+                <FieldDescription>
+                  Markdown, TXT, and CSV files become Harness sources.
+                </FieldDescription>
+              </Field>
+              {sourceFiles.length ? (
+                <div className="grid gap-2 rounded-md border bg-background p-2" aria-label="Selected source files">
+                  {sourceFiles.map((file) => (
+                    <div className="flex items-center justify-between gap-3 text-sm" key={`${file.name}-${file.size}`}>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <FileText className="size-4 shrink-0 text-muted-foreground" />
+                        <span className="truncate font-medium">{file.name}</span>
+                      </span>
+                      <span className="shrink-0 font-mono text-[0.68rem] text-muted-foreground">
+                        {formatBytes(file.size)}
+                      </span>
+                    </div>
+                  ))}
+                  <Button
+                    className="justify-self-start"
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      if (sourceFileInputRef.current) {
+                        sourceFileInputRef.current.value = "";
+                      }
+                      onClearSourceFiles();
+                    }}
+                  >
+                    <X className="size-3.5" />
+                    Clear files
+                  </Button>
+                </div>
+              ) : null}
               <Field>
                 <FieldLabel htmlFor="sourceDraft">Source content</FieldLabel>
                 <Textarea
@@ -1663,6 +1745,35 @@ function upsertRun(current: RunSummary[], run: RunSummary): RunSummary[] {
 
 function upsertById<T extends { id: string }>(current: T[], item: T): T[] {
   return [item, ...current.filter((candidate) => candidate.id !== item.id)];
+}
+
+async function readSourceDraftFile(file: File): Promise<SourceDraftFile> {
+  return {
+    name: file.name,
+    content: await readFileText(file),
+    size: file.size,
+  };
+}
+
+function readFileText(file: File): Promise<string> {
+  if (typeof file.text === "function") {
+    return file.text();
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result ?? "")));
+    reader.addEventListener("error", () => reject(reader.error ?? new Error("File read failed.")));
+    reader.readAsText(file);
+  });
+}
+
+function formatBytes(size: number): string {
+  if (size < 1024) {
+    return `${size} B`;
+  }
+
+  return `${Math.round(size / 102.4) / 10} KB`;
 }
 
 function reviewFromBundle(bundle: RunBundle): StudioReview | null {

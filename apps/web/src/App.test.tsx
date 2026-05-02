@@ -457,6 +457,20 @@ describe("Crux Studio Ask workflow", () => {
     expect(screen.getByText("harness engine ready")).toBeInTheDocument();
     expect(screen.getAllByText("Wholesale intake notes").length).toBeGreaterThan(0);
 
+    const sourceFiles = [
+      new File(["# Queue notes\n\nMonday handoffs delay first response."], "queue-notes.md", {
+        type: "text/markdown",
+      }),
+      new File(["week,first_response_minutes\n1,82\n2,71\n"], "response-times.csv", {
+        type: "text/csv",
+      }),
+    ];
+    fireEvent.change(screen.getByLabelText("Attach source files"), {
+      target: { files: sourceFiles },
+    });
+    expect(await screen.findByText("queue-notes.md")).toBeInTheDocument();
+    expect(screen.getByText("response-times.csv")).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "Create source pack" }));
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
@@ -464,6 +478,23 @@ describe("Crux Studio Ask workflow", () => {
         expect.objectContaining({ method: "POST" }),
       );
     });
+    const sourcePackCall = vi.mocked(fetch).mock.calls.find(([url, init]) => {
+      return String(url).endsWith("/api/source-packs") && init?.method === "POST";
+    });
+    expect(JSON.parse(String(sourcePackCall?.[1]?.body))).toEqual(
+      expect.objectContaining({
+        files: [
+          {
+            name: "queue-notes.md",
+            content: "# Queue notes\n\nMonday handoffs delay first response.",
+          },
+          {
+            name: "response-times.csv",
+            content: "week,first_response_minutes\n1,82\n2,71\n",
+          },
+        ],
+      }),
+    );
 
     fireEvent.click(screen.getAllByText("mock-ask")[0]);
     fireEvent.click(await screen.findByRole("tab", { name: "Claims" }));

@@ -1,5 +1,34 @@
 # Trace Log
 
+## 2026-05-02T19:01:00+02:00 - Phase 09 Source File Upload Workspace
+
+Intent:
+
+- Implement the next productization phase under the required phase contract: full implementation, E2E/smoke tests, spec validation, artifacts, and next-phase handoff.
+- Make source-pack creation work with real selected files instead of only pasted text.
+
+Implemented:
+
+- Added multi-file selection to the ask panel source-pack workflow.
+- Added browser-side file reading for Markdown, TXT, and CSV source files.
+- Added selected-file preview rows with file names and sizes.
+- Preserved pasted-source fallback for quick source notes.
+- Sent selected file names and contents through the existing source-pack API.
+- Added `docs/PHASE_09_SOURCE_FILE_UPLOAD_SPEC.md`.
+
+Verification:
+
+- Failing web workflow test was written first and passed after implementation.
+- Focused web E2E-style test passed: `pnpm --filter @crux-studio/web test -- src/App.test.tsx`.
+- Full Studio verification passed: `pnpm verify`.
+- Local smoke passed against the real local Harness provider: `pnpm smoke:local`.
+- Final smoke result: source-backed run `20260502T170515Z-how-should-a-support-team-reduce-first-response-`; readiness `usable_with_warnings`; 2 sources; 4 source chunks.
+
+Result:
+
+- Phase 09 is done.
+- Next phase: Phase 10 Answer-First Decision Brief.
+
 ## 2026-05-02T18:47:00+02:00 - Source-Backed Productization Bridge
 
 Intent:
