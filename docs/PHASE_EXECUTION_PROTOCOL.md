@@ -20,15 +20,16 @@ Every phase must complete these steps before it is considered done:
 - Phase 12: Durable Lifecycle Recovery, implemented in Studio v0.9.
 - Phase 13: Evidence Gap Closure Loop, implemented in Studio v0.10.
 - Phase 14: Decision Delta Report, implemented in Studio v0.11.
+- Phase 15: Exportable Decision Delta Package, implemented in Studio v0.12.
 
 ## Next Phase
 
-Phase 15: Exportable Decision Delta Package.
+Phase 16: Decision Lineage Timeline.
 
 Goal:
 
-- Make the before/after decision delta shareable as a reviewed Markdown package that can travel with the memo, source movement, blocker movement, and human review state.
+- Make the path from original run to evidence task to rerun to delta package visible as a project-level decision lineage.
 
 Why this is next:
 
-- Studio can now explain why a newer run is better. The next product gap is making that explanation exportable so a user can share the improvement, not just inspect it locally.
+- Studio can now export an improved run's decision movement. The next product gap is connecting those artifacts into a readable history so users can see how a decision matured over time.

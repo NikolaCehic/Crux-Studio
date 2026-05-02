@@ -145,9 +145,12 @@ POST   /api/runs/:runId/review/claim
 POST   /api/runs/:runId/review/evidence
 POST   /api/runs/:runId/replay
 POST   /api/runs/compare
+POST   /api/runs/compare/export/decision-delta-package
 ```
 
 `POST /api/runs/compare` returns the raw changed paths plus a decision delta object with verdict, trust movement, readiness movement, source movement, evidence gap movement, blocker movement, notable changes, and next step.
+
+`POST /api/runs/compare/export/decision-delta-package` returns a Markdown package for the same comparison, including the delta, review summaries, changed artifact paths, and the newer memo.
 
 ## Run Bundle Shape For UI
 
@@ -184,6 +187,7 @@ v0.1:
 - interrupted running lifecycle jobs become failed and retryable after local server restart
 - evidence closure task resolution creates a local source pack and starts a lifecycle rerun
 - run comparison creates a decision delta report for before and after evidence closure movement
+- comparison export creates a portable Markdown decision delta package
 - no hosted database yet
 
 v0.2:

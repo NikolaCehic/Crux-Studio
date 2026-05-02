@@ -279,6 +279,14 @@ const mockResolvedEvidenceTask = {
 
 describe("Crux Studio Ask workflow", () => {
   beforeEach(() => {
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    vi.stubGlobal(
+      "URL",
+      Object.assign(URL, {
+        createObjectURL: vi.fn(() => "blob:crux-delta-package"),
+        revokeObjectURL: vi.fn(),
+      }),
+    );
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -485,6 +493,19 @@ describe("Crux Studio Ask workflow", () => {
           );
         }
 
+        if (url.endsWith("/api/runs/compare/export/decision-delta-package")) {
+          return new Response(
+            "# Crux Decision Delta Package\n\n## Verdict\n\nThe newer run is stronger.",
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "text/markdown; charset=utf-8",
+                "Content-Disposition": "attachment; filename=\"mock-replay-decision-delta-package.md\"",
+              },
+            },
+          );
+        }
+
         if (url.endsWith("/api/runs/mock-ask")) {
           return new Response(JSON.stringify(mockBundle), {
             status: 200,
@@ -516,6 +537,7 @@ describe("Crux Studio Ask workflow", () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -698,6 +720,14 @@ describe("Crux Studio Ask workflow", () => {
     expect(screen.getByText("1 closed")).toBeInTheDocument();
     expect(screen.getByText("Changed artifact paths")).toBeInTheDocument();
     expect(screen.getByText("Review claims and export the decision package.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Export delta package" }));
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/runs/compare/export/decision-delta-package",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    expect(URL.createObjectURL).toHaveBeenCalled();
 
     expect(
       screen.getAllByRole("link", { name: "Export reviewed memo" })[0],

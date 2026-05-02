@@ -1,5 +1,48 @@
 # Trace Log
 
+## 2026-05-02T22:30:52+02:00 - Phase 15 Exportable Decision Delta Package
+
+Intent:
+
+- Implement the next productization phase under the required phase contract: full implementation, E2E/smoke tests, spec validation, artifacts, and next-phase handoff.
+- Make the decision delta portable so a user can export a review-ready package instead of only inspecting the comparison inside Studio.
+
+Implemented:
+
+- Added `POST /api/runs/compare/export/decision-delta-package`.
+- Reused the existing comparison engine so exported packages match the in-product Decision Delta report.
+- Added Markdown package sections for verdict, next step, trust movement, readiness movement, source movement, closed evidence gaps, remaining evidence gaps, blocker movement, notable changes, human review summary, changed artifact paths, and the newer run decision memo.
+- Added stable Markdown filename generation and download response headers.
+- Added a Studio API helper for exporting decision delta packages.
+- Added an `Export delta package` action beside the Decision Delta report.
+- Added browser-side Markdown download handling.
+- Expanded local smoke to export and validate a Markdown delta package after evidence closure comparison.
+- Added `docs/PHASE_15_EXPORTABLE_DECISION_DELTA_PACKAGE_SPEC.md`.
+
+Verification:
+
+- Failing server and web expectations were written first and passed after implementation.
+- Focused server product workflow test passed: `pnpm --filter @crux-studio/server test -- src/product-workflow.test.ts`.
+- Focused web workflow test passed: `pnpm --filter @crux-studio/web test -- src/App.test.tsx`.
+- Focused server and web typechecks passed.
+- Full Studio verification passed: `pnpm verify`.
+- Local smoke passed: `pnpm smoke:local`.
+- Final source-backed smoke job: `job-20260502202902-6c2591ce`.
+- Final source-backed smoke run: `20260502T202902Z-how-should-a-support-team-reduce-first-response-`.
+- Final evidence base run: `20260502T202902Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence task: `task-18e43523-12-adversarial-scenario-remove-evidence`.
+- Final evidence closure rerun job: `job-20260502202903-94d04e29`.
+- Final evidence closure rerun: `20260502T202903Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence closure result: task `resolved`, rerun source count `1`, delta direction `improved`, closed gap count `1`, remaining blocker count `0`, comparison differences `7`, delta package bytes `6439`.
+- Refreshed README screenshots:
+  - `docs/assets/crux-studio-workbench.png`
+  - `docs/assets/crux-studio-review-compare.png`
+
+Result:
+
+- Phase 15 is done.
+- Next phase: Phase 16 Decision Lineage Timeline.
+
 ## 2026-05-02T21:12:07+02:00 - Phase 14 Decision Delta Report
 
 Intent:

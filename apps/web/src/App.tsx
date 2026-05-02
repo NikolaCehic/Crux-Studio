@@ -64,6 +64,7 @@ import {
   compareRuns,
   createProject,
   createSourcePack,
+  exportDecisionDeltaPackage,
   getRunJob,
   getRun,
   listDemos,
@@ -178,6 +179,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isLoadingBundle, setIsLoadingBundle] = useState(false);
+  const [isExportingDelta, setIsExportingDelta] = useState(false);
 
   const selectedRun = bundle ?? run;
   const activeProvider = providers[0];
@@ -532,6 +534,26 @@ export function App() {
     }
   }
 
+  async function handleExportDeltaPackage() {
+    if (!comparison) {
+      return;
+    }
+
+    setIsExportingDelta(true);
+    try {
+      const exported = await exportDecisionDeltaPackage(
+        comparison.leftRunId,
+        comparison.rightRunId,
+      );
+      downloadMarkdown(exported.filename, exported.markdown);
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Decision delta package export failed.");
+    } finally {
+      setIsExportingDelta(false);
+    }
+  }
+
   return (
     <main className="min-h-svh bg-background text-foreground lg:grid lg:grid-cols-[256px_minmax(0,1fr)_320px]">
       <aside
@@ -543,7 +565,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.11 · workspace
+              v0.12 · workspace
             </p>
           </div>
         </div>
@@ -746,12 +768,14 @@ export function App() {
             bundle={bundle}
             comparison={comparison}
             evidenceTasks={evidenceTasks}
+            isExportingDelta={isExportingDelta}
             isLoadingBundle={isLoadingBundle}
             review={review}
             selectedRun={selectedRun}
             onAnnotateEvidence={handleAnnotateEvidence}
             onChangeTab={setActiveTab}
             onCompareLatest={() => void handleCompareLatest()}
+            onExportDeltaPackage={() => void handleExportDeltaPackage()}
             onReplay={() => void handleReplay()}
             onResolveEvidenceTask={(taskId) => void handleResolveEvidenceTask(taskId)}
             onReviewClaim={handleReviewClaim}
@@ -1262,12 +1286,14 @@ function MemoPanel({
   bundle,
   comparison,
   evidenceTasks,
+  isExportingDelta,
   isLoadingBundle,
   review,
   selectedRun,
   onAnnotateEvidence,
   onChangeTab,
   onCompareLatest,
+  onExportDeltaPackage,
   onReplay,
   onResolveEvidenceTask,
   onReviewClaim,
@@ -1276,12 +1302,14 @@ function MemoPanel({
   bundle: RunBundle | null;
   comparison: RunComparison | null;
   evidenceTasks: StudioEvidenceTask[];
+  isExportingDelta: boolean;
   isLoadingBundle: boolean;
   review: StudioReview | null;
   selectedRun: RunBundle | RunSummary | null;
   onAnnotateEvidence: (evidenceId: string) => void;
   onChangeTab: (tab: ArtifactTab) => void;
   onCompareLatest: () => void;
+  onExportDeltaPackage: () => void;
   onReplay: () => void;
   onResolveEvidenceTask: (taskId: string) => void;
   onReviewClaim: (claimId: string, status: "approved" | "rejected") => void;
@@ -1337,7 +1365,13 @@ function MemoPanel({
               onReviewClaim={onReviewClaim}
             />
             <ReviewSummary review={review} runId={selectedRun.runId} />
-            {comparison ? <ComparisonSummary comparison={comparison} /> : null}
+            {comparison ? (
+              <ComparisonSummary
+                comparison={comparison}
+                isExporting={isExportingDelta}
+                onExport={onExportDeltaPackage}
+              />
+            ) : null}
           </>
         ) : (
           <div className="grid min-h-36 place-items-center rounded-lg border border-dashed bg-muted/35 p-8 text-center text-sm text-muted-foreground">
@@ -2012,7 +2046,15 @@ function ReviewSummary({
   );
 }
 
-function ComparisonSummary({ comparison }: { comparison: RunComparison }) {
+function ComparisonSummary({
+  comparison,
+  isExporting,
+  onExport,
+}: {
+  comparison: RunComparison;
+  isExporting: boolean;
+  onExport: () => void;
+}) {
   const delta = comparison.delta;
   const sourceDelta = formatSignedCount(delta.sourceMovement.sourceCountDelta, "source");
   const chunkDelta = formatSignedCount(delta.sourceMovement.sourceChunkDelta, "chunk");
@@ -2025,9 +2067,22 @@ function ComparisonSummary({ comparison }: { comparison: RunComparison }) {
           <GitCompareArrows className="size-4" />
         </span>
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-semibold">Decision delta</h3>
-            <Badge variant="secondary">{delta.trustMovement.direction}</Badge>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-semibold">Decision delta</h3>
+              <Badge variant="secondary">{delta.trustMovement.direction}</Badge>
+            </div>
+            <Button
+              className="shrink-0"
+              disabled={isExporting}
+              size="sm"
+              type="button"
+              variant="outline"
+              onClick={onExport}
+            >
+              <Download className="size-3.5" />
+              {isExporting ? "Exporting" : "Export delta package"}
+            </Button>
           </div>
           <p className="mt-1 text-muted-foreground">{delta.verdict}</p>
         </div>
@@ -2081,15 +2136,15 @@ function ComparisonSummary({ comparison }: { comparison: RunComparison }) {
 
       <div className="grid gap-2 border-t pt-3">
         <p className="font-semibold">Changed artifact paths</p>
-      <p className="break-all font-mono text-xs text-muted-foreground">
-        {comparison.leftRunId} to {comparison.rightRunId}
-      </p>
+        <p className="break-all font-mono text-xs text-muted-foreground">
+          {comparison.leftRunId} to {comparison.rightRunId}
+        </p>
         <ul className="list-inside list-disc text-muted-foreground">
-        {comparison.differences.map((difference) => (
-          <li key={difference.path}>{difference.path}</li>
-        ))}
-      </ul>
-    </div>
+          {comparison.differences.map((difference) => (
+            <li key={difference.path}>{difference.path}</li>
+          ))}
+        </ul>
+      </div>
     </section>
   );
 }
@@ -2513,6 +2568,18 @@ function formatBytes(size: number): string {
   }
 
   return `${Math.round(size / 102.4) / 10} KB`;
+}
+
+function downloadMarkdown(filename: string, markdown: string) {
+  const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function reviewFromBundle(bundle: RunBundle): StudioReview | null {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.12.0 - 2026-05-02
+
+- Added a Markdown decision delta package export endpoint for run comparisons.
+- Delta packages include verdict, next step, trust movement, readiness movement, source movement, closed gaps, blockers, notable changes, human review summaries, changed artifact paths, and the newer memo.
+- Added a Studio `Export delta package` action to the Decision Delta panel.
+- Added browser-side Markdown download handling for delta packages.
+- Expanded local smoke to verify the exported package against a real local Harness evidence-closure rerun.
+- Added the Phase 15 exportable decision delta package spec artifact.
+
 ## 0.11.0 - 2026-05-02
 
 - Added a decision delta report to run comparison responses.

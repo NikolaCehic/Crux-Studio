@@ -21,6 +21,18 @@ async function postJson(url, body) {
   return response.json();
 }
 
+async function postText(url, body) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`${url} returned ${response.status}`);
+  }
+  return response.text();
+}
+
 async function waitForJob(jobId) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const job = await getJson(`${serverUrl}/api/runs/jobs/${jobId}`);
@@ -154,6 +166,22 @@ async function main() {
   if (closureDelta.sourceMovement.closedGaps.length < 1) {
     throw new Error("Decision delta did not preserve the resolved evidence task as a closed gap.");
   }
+  const deltaPackage = await postText(`${serverUrl}/api/runs/compare/export/decision-delta-package`, {
+    leftRunId: gapBaseRun.runId,
+    rightRunId: evidenceClosureRun.runId,
+  });
+  for (const expectedText of [
+    "# Crux Decision Delta Package",
+    "## Verdict",
+    "## Closed Evidence Gaps",
+    openEvidenceTask.title,
+    "## Changed Artifact Paths",
+    "## Newer Run Decision Memo",
+  ]) {
+    if (!deltaPackage.includes(expectedText)) {
+      throw new Error(`Decision delta package is missing expected text: ${expectedText}`);
+    }
+  }
 
   console.log(JSON.stringify({
     ok: health.ok === true,
@@ -191,6 +219,7 @@ async function main() {
       closedGapCount: closureDelta.sourceMovement.closedGaps.length,
       remainingBlockerCount: closureDelta.blockerMovement.remainingBlockers.length,
       nextStep: closureDelta.nextStep,
+      deltaPackageBytes: deltaPackage.length,
     },
   }, null, 2));
 }

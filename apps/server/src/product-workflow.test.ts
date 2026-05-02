@@ -195,6 +195,23 @@ describe("Studio product workflow API", () => {
       expect.arrayContaining(["runId"]),
     );
 
+    const deltaPackageResponse = await app.inject({
+      method: "POST",
+      url: "/api/runs/compare/export/decision-delta-package",
+      payload: { leftRunId: run.runId, rightRunId: replayed.runId },
+    });
+    expect(deltaPackageResponse.statusCode).toBe(200);
+    expect(deltaPackageResponse.headers["content-type"]).toContain("text/markdown");
+    expect(deltaPackageResponse.headers["content-disposition"]).toContain("decision-delta-package");
+    expect(deltaPackageResponse.body).toContain("# Crux Decision Delta Package");
+    expect(deltaPackageResponse.body).toContain("## Verdict");
+    expect(deltaPackageResponse.body).toContain("## Human Review Summary");
+    expect(deltaPackageResponse.body).toContain("Left run approved claims: claim-1");
+    expect(deltaPackageResponse.body).toContain("Right run approved claims: none");
+    expect(deltaPackageResponse.body).toContain("## Changed Artifact Paths");
+    expect(deltaPackageResponse.body).toContain("## Newer Run Decision Memo");
+    expect(deltaPackageResponse.body).toContain(replayed.runId);
+
     const projectRuns = await app.inject({
       method: "GET",
       url: `/api/projects/${project.id}/runs`,
@@ -359,6 +376,16 @@ describe("Studio product workflow API", () => {
         expect.stringMatching(/\d+ evidence gaps? closed\./),
       ]),
     );
+
+    const deltaPackageResponse = await app.inject({
+      method: "POST",
+      url: "/api/runs/compare/export/decision-delta-package",
+      payload: { leftRunId: draftRun.runId, rightRunId: completedJob.run.runId },
+    });
+    expect(deltaPackageResponse.statusCode).toBe(200);
+    expect(deltaPackageResponse.body).toContain("## Closed Evidence Gaps");
+    expect(deltaPackageResponse.body).toContain(task.title);
+    expect(deltaPackageResponse.body).toContain("## Next Step");
   });
 });
 

@@ -246,6 +246,27 @@ export async function compareRuns(leftRunId: string, rightRunId: string): Promis
   );
 }
 
+export async function exportDecisionDeltaPackage(
+  leftRunId: string,
+  rightRunId: string,
+): Promise<{ filename: string; markdown: string }> {
+  const response = await fetch("/api/runs/compare/export/decision-delta-package", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ leftRunId, rightRunId }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Decision delta package export failed.");
+  }
+
+  return {
+    filename: filenameFromContentDisposition(response.headers.get("content-disposition")) ??
+      `${rightRunId}-decision-delta-package.md`,
+    markdown: await response.text(),
+  };
+}
+
 export async function listRuns(): Promise<RunSummary[]> {
   const response = await fetch("/api/runs");
 
@@ -281,4 +302,9 @@ async function postJson<T>(url: string, body: unknown, failureMessage: string): 
   }
 
   return (await response.json()) as T;
+}
+
+function filenameFromContentDisposition(value: string | null): string | null {
+  const match = value?.match(/filename="?([^";]+)"?/i);
+  return match?.[1] ?? null;
 }

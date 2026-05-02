@@ -773,6 +773,39 @@ export function buildServer({
     }
   });
 
+  app.post("/api/runs/compare/export/decision-delta-package", async (request, reply) => {
+    const parsed = compareSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ message: "Comparison export requires left and right run IDs." });
+    }
+
+    try {
+      const [left, right] = await Promise.all([
+        provider.getRun(parsed.data.leftRunId),
+        provider.getRun(parsed.data.rightRunId),
+      ]);
+      const comparison = compareRunBundles(
+        left,
+        right,
+        await closedEvidenceTaskTitles(parsed.data.leftRunId, parsed.data.rightRunId),
+      );
+      const [leftReview, rightReview] = await Promise.all([
+        store.getReview(left.runId),
+        store.getReview(right.runId),
+      ]);
+
+      return reply
+        .type("text/markdown; charset=utf-8")
+        .header(
+          "content-disposition",
+          `attachment; filename="${safeFilename(right.runId)}-decision-delta-package.md"`,
+        )
+        .send(renderDecisionDeltaPackage(left, right, comparison, leftReview, rightReview));
+    } catch {
+      return reply.code(404).send({ message: "Run not found." });
+    }
+  });
+
   async function closedEvidenceTaskTitles(leftRunId: string, rightRunId: string) {
     await ensureRecoveredJobs();
     const [tasks, rightLink] = await Promise.all([
@@ -967,6 +1000,92 @@ Evidence annotations: ${
 ## Decision Memo
 
 ${bundle.memo}`;
+}
+
+function renderDecisionDeltaPackage(
+  left: RunLike,
+  right: RunLike,
+  comparison: ReturnType<typeof compareRunBundles>,
+  leftReview: Awaited<ReturnType<StudioStore["getReview"]>>,
+  rightReview: Awaited<ReturnType<StudioStore["getReview"]>>,
+): string {
+  const delta = comparison.delta;
+
+  return `# Crux Decision Delta Package
+
+Left run: ${left.runId}
+Right run: ${right.runId}
+Question: ${right.question}
+
+## Verdict
+
+${delta.verdict}
+
+## Next Step
+
+${delta.nextStep}
+
+## Trust Movement
+
+- Direction: ${delta.trustMovement.direction}
+- Movement: ${delta.trustMovementLabel}
+- Status: ${delta.trustMovement.fromStatus} to ${delta.trustMovement.toStatus}
+- Confidence: ${delta.trustMovement.fromConfidence} to ${delta.trustMovement.toConfidence}
+
+## Readiness Movement
+
+- Status: ${delta.readinessMovement.from} to ${delta.readinessMovement.to}
+- Changed: ${delta.readinessMovement.changed ? "yes" : "no"}
+
+## Source Movement
+
+- Sources: ${formatSignedNumber(delta.sourceMovement.sourceCountDelta)}
+- Source chunks: ${formatSignedNumber(delta.sourceMovement.sourceChunkDelta)}
+- Remaining evidence gaps: ${delta.sourceMovement.remainingGaps.length}
+
+## Closed Evidence Gaps
+
+${markdownList(delta.sourceMovement.closedGaps)}
+
+## Remaining Evidence Gaps
+
+${markdownList(delta.sourceMovement.remainingGaps)}
+
+## Blocker Movement
+
+Closed blockers:
+
+${markdownList(delta.blockerMovement.closedBlockers)}
+
+New blockers:
+
+${markdownList(delta.blockerMovement.newBlockers)}
+
+Remaining blockers:
+
+${markdownList(delta.blockerMovement.remainingBlockers)}
+
+## Notable Changes
+
+${markdownList(delta.notableChanges)}
+
+## Human Review Summary
+
+Left run approved claims: ${leftReview.summary.approvedClaims.join(", ") || "none"}
+Left run rejected claims: ${leftReview.summary.rejectedClaims.join(", ") || "none"}
+Left run evidence annotations: ${formatEvidenceAnnotations(leftReview)}
+
+Right run approved claims: ${rightReview.summary.approvedClaims.join(", ") || "none"}
+Right run rejected claims: ${rightReview.summary.rejectedClaims.join(", ") || "none"}
+Right run evidence annotations: ${formatEvidenceAnnotations(rightReview)}
+
+## Changed Artifact Paths
+
+${markdownList(comparison.differences.map((difference) => difference.path))}
+
+## Newer Run Decision Memo
+
+${right.memo}`;
 }
 
 function compareRunBundles(
@@ -1240,6 +1359,36 @@ function joinSentence(items: string[]) {
   }
 
   return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
+function markdownList(items: string[]) {
+  if (!items.length) {
+    return "- none";
+  }
+
+  return items.map((item) => `- ${item.replace(/\s+/g, " ").trim()}`).join("\n");
+}
+
+function formatSignedNumber(value: number) {
+  if (value === 0) {
+    return "0";
+  }
+
+  return `${value > 0 ? "+" : ""}${value}`;
+}
+
+function formatEvidenceAnnotations(review: Awaited<ReturnType<StudioStore["getReview"]>>) {
+  return review.summary.evidenceAnnotations
+    .map((item) => `${item.evidenceId} (${item.noteCount})`)
+    .join(", ") || "none";
+}
+
+function safeFilename(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96) || "crux-run";
 }
 
 function compareValue(pathName: string, left: unknown, right: unknown) {
