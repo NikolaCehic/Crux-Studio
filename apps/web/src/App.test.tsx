@@ -442,6 +442,40 @@ describe("Crux Studio Ask workflow", () => {
               rightRunId: "mock-replay",
               trustMovement: 0.1,
               differences: [{ path: "trust.status", left: "warn", right: "pass" }],
+              delta: {
+                verdict: "The newer run is stronger because trust improved and evidence gaps closed.",
+                trustMovementLabel: "+10 pts",
+                readinessMovement: {
+                  from: "usable_with_warnings",
+                  to: "ready",
+                  changed: true,
+                },
+                trustMovement: {
+                  fromStatus: "warn",
+                  toStatus: "pass",
+                  fromConfidence: 0.68,
+                  toConfidence: 0.78,
+                  points: 10,
+                  direction: "improved",
+                },
+                sourceMovement: {
+                  sourceCountDelta: 1,
+                  sourceChunkDelta: 1,
+                  closedGaps: ["Attach source material for the top evidence gap."],
+                  newGaps: [],
+                  remainingGaps: [],
+                },
+                blockerMovement: {
+                  closedBlockers: ["Offline mock run has no source inventory yet."],
+                  newBlockers: [],
+                  remainingBlockers: [],
+                },
+                notableChanges: [
+                  "Readiness moved from usable_with_warnings to ready.",
+                  "1 evidence gap closed.",
+                ],
+                nextStep: "Review claims and export the decision package.",
+              },
               summary: { differenceCount: 1, leftTrust: "warn", rightTrust: "pass" },
             }),
             {
@@ -658,7 +692,12 @@ describe("Crux Studio Ask workflow", () => {
     expect((await screen.findAllByText("mock-replay")).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Compare latest" }));
-    expect(await screen.findByText(/Trust movement: 10%/)).toBeInTheDocument();
+    expect(await screen.findByText("Decision delta")).toBeInTheDocument();
+    expect(screen.getByText(/newer run is stronger/)).toBeInTheDocument();
+    expect(screen.getByText("+10 pts")).toBeInTheDocument();
+    expect(screen.getByText("1 closed")).toBeInTheDocument();
+    expect(screen.getByText("Changed artifact paths")).toBeInTheDocument();
+    expect(screen.getByText("Review claims and export the decision package.")).toBeInTheDocument();
 
     expect(
       screen.getAllByRole("link", { name: "Export reviewed memo" })[0],

@@ -1,5 +1,49 @@
 # Trace Log
 
+## 2026-05-02T21:12:07+02:00 - Phase 14 Decision Delta Report
+
+Intent:
+
+- Implement the next productization phase under the required phase contract: full implementation, E2E/smoke tests, spec validation, artifacts, and next-phase handoff.
+- Make before and after run movement readable enough that a user can explain why the newer run is stronger, weaker, or comparable.
+
+Implemented:
+
+- Added a `delta` object to `POST /api/runs/compare`.
+- Added deterministic verdict, trust movement label, readiness movement, source movement, evidence gap movement, blocker movement, notable changes, and next step.
+- Expanded comparison differences to include agent blockers and source chunk movement.
+- Used Studio evidence-task resolution provenance so resolved tasks appear as closed gaps even when the Harness missing-evidence strings change between runs.
+- Saved evidence-task resolution before starting the rerun job to avoid local file-store race conditions between task provenance and job persistence.
+- Sorted same-second reruns deterministically so Compare Latest compares the base run to the improved rerun in the expected direction.
+- Replaced the Studio raw comparison panel with a readable Decision Delta report.
+- Tightened the delta metric layout after screenshot audit so readiness/source labels do not overlap in the workbench column.
+- Expanded local smoke to require a readable decision delta, source improvement, closed gap provenance, notable changes, direction, remaining blocker count, and next step.
+- Added `docs/PHASE_14_DECISION_DELTA_REPORT_SPEC.md`.
+
+Verification:
+
+- Failing server and web expectations were written first and passed after implementation.
+- Focused server product workflow test passed: `pnpm --filter @crux-studio/server test -- src/product-workflow.test.ts`.
+- Focused web workflow test passed: `pnpm --filter @crux-studio/web test -- src/App.test.tsx`.
+- Focused server and web typechecks passed.
+- Full Studio verification passed: `pnpm verify`.
+- Local smoke passed: `pnpm smoke:local`.
+- Final source-backed smoke job: `job-20260502190935-9e968ffa`.
+- Final source-backed smoke run: `20260502T190935Z-how-should-a-support-team-reduce-first-response-`.
+- Final evidence base run: `20260502T190935Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence task: `task-ed7e72e8-12-adversarial-scenario-remove-evidence`.
+- Final evidence closure rerun job: `job-20260502190936-27ef713d`.
+- Final evidence closure rerun: `20260502T190936Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence closure result: task `resolved`, rerun source count `1`, delta direction `improved`, closed gap count `1`, remaining blocker count `0`, comparison differences `7`.
+- Refreshed README screenshots:
+  - `docs/assets/crux-studio-workbench.png`
+  - `docs/assets/crux-studio-review-compare.png`
+
+Result:
+
+- Phase 14 is done.
+- Next phase: Phase 15 Exportable Decision Delta Package.
+
 ## 2026-05-02T20:47:00+02:00 - Phase 13 Evidence Gap Closure Loop
 
 Intent:

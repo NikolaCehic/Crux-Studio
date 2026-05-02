@@ -138,8 +138,21 @@ async function main() {
     rightRunId: evidenceClosureRun.runId,
   });
   const closureSourceCount = evidenceClosureBundle.sourceWorkspace?.sourceCount ?? 0;
+  const closureDelta = closureComparison.delta;
   if (closureSourceCount < 1) {
     throw new Error(`Evidence closure run did not attach source evidence: ${closureSourceCount}`);
+  }
+  if (!closureDelta?.verdict || !closureDelta?.nextStep) {
+    throw new Error("Evidence closure comparison did not return a readable decision delta.");
+  }
+  if (!closureDelta.sourceMovement || closureDelta.sourceMovement.sourceCountDelta < 1) {
+    throw new Error(`Decision delta did not show source coverage improvement: ${JSON.stringify(closureDelta.sourceMovement)}`);
+  }
+  if (!Array.isArray(closureDelta.notableChanges) || closureDelta.notableChanges.length === 0) {
+    throw new Error("Decision delta did not include notable changes.");
+  }
+  if (closureDelta.sourceMovement.closedGaps.length < 1) {
+    throw new Error("Decision delta did not preserve the resolved evidence task as a closed gap.");
   }
 
   console.log(JSON.stringify({
@@ -173,6 +186,11 @@ async function main() {
       rerunId: evidenceClosureRun.runId,
       rerunSourceCount: closureSourceCount,
       comparisonDifferences: closureComparison.summary?.differenceCount ?? closureComparison.differences?.length ?? 0,
+      deltaVerdict: closureDelta.verdict,
+      deltaDirection: closureDelta.trustMovement?.direction,
+      closedGapCount: closureDelta.sourceMovement.closedGaps.length,
+      remainingBlockerCount: closureDelta.blockerMovement.remainingBlockers.length,
+      nextStep: closureDelta.nextStep,
     },
   }, null, 2));
 }

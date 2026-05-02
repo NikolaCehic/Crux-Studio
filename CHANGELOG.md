@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.11.0 - 2026-05-02
+
+- Added a decision delta report to run comparison responses.
+- Delta reports now explain verdict, trust movement, readiness movement, source movement, closed evidence gaps, remaining gaps, blocker movement, notable changes, and next step.
+- Delta closed gaps now include Studio evidence-task resolution provenance when a rerun was created from a resolved task.
+- Expanded comparison coverage to include agent blockers and source chunk movement.
+- Sorted same-second reruns deterministically so Compare Latest reads base to improved run in the expected direction.
+- Replaced the raw Studio compare panel with a readable Decision Delta surface.
+- Expanded local smoke to fail when an evidence closure comparison lacks a readable delta.
+- Added the Phase 14 decision delta report spec artifact.
+
 ## 0.10.0 - 2026-05-02
 
 - Added evidence gap closure tasks generated from missing evidence, trust blockers, agent blockers, and source-related agent next actions.

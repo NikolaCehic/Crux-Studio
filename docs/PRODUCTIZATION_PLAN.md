@@ -222,7 +222,7 @@ The first implementation slice is Phase 2 plus the first part of Phase 3:
 
 ## Local-First Implementation Status
 
-Implemented in Studio v0.4 through v0.10:
+Implemented in Studio v0.4 through v0.11:
 
 - Phase 1: canonical demo questions are exposed through `/api/demos` and the ask panel.
 - Phase 2: the provider boundary carries readiness, Harness version, source summaries, bounded agents, source inventory, source chunks, and eval reports.
@@ -238,6 +238,7 @@ Implemented in Studio v0.4 through v0.10:
 - Phase 11: Studio v0.8 adds an async lifecycle layer for new runs, including queued, running, completed, failed, cancelled, and retry states.
 - Phase 12: Studio v0.9 persists lifecycle job history, resumes queued jobs after local restart, and makes interrupted running jobs retryable.
 - Phase 13: Studio v0.10 turns source gaps into evidence tasks that can create source packs, rerun Crux, and compare the improved run.
+- Phase 14: Studio v0.11 turns run comparison into a decision delta report with verdict, trust movement, source movement, closed gaps, blockers, notable changes, and next step.
 
 Still deferred:
 

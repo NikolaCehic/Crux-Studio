@@ -463,7 +463,9 @@ export function buildServer({
   app.get<{ Params: { projectId: string } }>(
     "/api/projects/:projectId/runs",
     async (request) =>
-      store.listProjectRuns(request.params.projectId, await provider.listRuns()),
+      sortRunsNewestFirst(
+        await store.listProjectRuns(request.params.projectId, await provider.listRuns()),
+      ),
   );
 
   app.post("/api/source-packs", async (request, reply) => {
@@ -493,9 +495,11 @@ export function buildServer({
   });
 
   app.get("/api/runs", async () =>
-    Promise.all(
-      (await provider.listRuns()).map(async (run) =>
-        enrichRun(run, await store.getRunLink(run.runId)),
+    sortRunsNewestFirst(
+      await Promise.all(
+        (await provider.listRuns()).map(async (run) =>
+          enrichRun(run, await store.getRunLink(run.runId)),
+        ),
       ),
     ),
   );
@@ -543,6 +547,15 @@ export function buildServer({
             },
           ],
         });
+        const resolvedAt = now();
+        let resolvedTask = await store.saveEvidenceTask({
+          ...task,
+          status: "resolved",
+          updatedAt: resolvedAt,
+          resolvedAt,
+          resolvedBySourcePackId: sourcePack.id,
+          resolutionNote: parsed.data.note?.trim() || undefined,
+        });
         const job = await createRunJob({
           projectId,
           sourcePackId: sourcePack.id,
@@ -551,15 +564,10 @@ export function buildServer({
           timeHorizon: "same as source run",
           sourcePolicy: "hybrid",
         });
-        const resolvedAt = now();
-        const resolvedTask = await store.saveEvidenceTask({
-          ...task,
-          status: "resolved",
-          updatedAt: resolvedAt,
-          resolvedAt,
-          resolvedBySourcePackId: sourcePack.id,
+        resolvedTask = await store.saveEvidenceTask({
+          ...resolvedTask,
+          updatedAt: now(),
           rerunJobId: job.jobId,
-          resolutionNote: parsed.data.note?.trim() || undefined,
         });
 
         return reply.code(201).send({ task: resolvedTask, sourcePack, job });
@@ -755,11 +763,35 @@ export function buildServer({
         provider.getRun(parsed.data.leftRunId),
         provider.getRun(parsed.data.rightRunId),
       ]);
-      return compareRunBundles(left, right);
+      return compareRunBundles(
+        left,
+        right,
+        await closedEvidenceTaskTitles(parsed.data.leftRunId, parsed.data.rightRunId),
+      );
     } catch {
       return reply.code(404).send({ message: "Run not found." });
     }
   });
+
+  async function closedEvidenceTaskTitles(leftRunId: string, rightRunId: string) {
+    await ensureRecoveredJobs();
+    const [tasks, rightLink] = await Promise.all([
+      store.listEvidenceTasks(leftRunId),
+      store.getRunLink(rightRunId),
+    ]);
+    const jobById = new Map((await listRunJobs()).map((job) => [job.jobId, job]));
+
+    return tasks
+      .filter((task) => {
+        const rerunJob = task.rerunJobId ? jobById.get(task.rerunJobId) : undefined;
+        const matchedByRerunJob = rerunJob?.run?.runId === rightRunId;
+        const matchedBySourcePack =
+          Boolean(task.resolvedBySourcePackId) &&
+          task.resolvedBySourcePackId === rightLink?.sourcePackId;
+        return task.status === "resolved" && (matchedByRerunJob || matchedBySourcePack);
+      })
+      .map((task) => task.title);
+  }
 
   return app;
 }
@@ -771,6 +803,17 @@ function enrichRun<T extends { runId: string }>(
   link: { projectId?: string; sourcePackId?: string } | undefined,
 ): T & { projectId?: string; sourcePackId?: string } {
   return link ? { ...run, projectId: link.projectId, sourcePackId: link.sourcePackId } : run;
+}
+
+function sortRunsNewestFirst<T extends { createdAt: string; runId: string }>(runs: T[]) {
+  return [...runs].sort((left, right) => {
+    const createdAtOrder = right.createdAt.localeCompare(left.createdAt);
+    if (createdAtOrder !== 0) {
+      return createdAtOrder;
+    }
+
+    return right.runId.localeCompare(left.runId);
+  });
 }
 
 function createEvidenceTasksFromRun(
@@ -926,7 +969,12 @@ Evidence annotations: ${
 ${bundle.memo}`;
 }
 
-function compareRunBundles(left: RunLike, right: RunLike) {
+function compareRunBundles(
+  left: RunLike,
+  right: RunLike,
+  resolvedEvidenceTaskTitles: string[] = [],
+) {
+  const trustMovement = Number((right.trust.confidence - left.trust.confidence).toFixed(2));
   const differences = [
     ...compareValue("runId", left.runId, right.runId),
     ...compareValue("question", left.question, right.question),
@@ -934,7 +982,9 @@ function compareRunBundles(left: RunLike, right: RunLike) {
     ...compareValue("trust.status", left.trust.status, right.trust.status),
     ...compareValue("agents.status", left.agents?.status, right.agents?.status),
     ...compareValue("agents.agentCount", left.agents?.agentCount, right.agents?.agentCount),
+    ...compareValue("agents.blockingIssues", left.agents?.blockingIssues, right.agents?.blockingIssues),
     ...compareValue("sourceWorkspace.sourceCount", left.sourceWorkspace?.sourceCount, right.sourceWorkspace?.sourceCount),
+    ...compareValue("sourceWorkspace.sourceChunkCount", left.sourceWorkspace?.sourceChunkCount, right.sourceWorkspace?.sourceChunkCount),
     ...compareValue("sourceWorkspace.missingEvidence", left.sourceWorkspace?.missingEvidence, right.sourceWorkspace?.missingEvidence),
     ...compareValue("answerability", left.answerability, right.answerability),
     ...compareValue("risk", left.risk, right.risk),
@@ -948,8 +998,9 @@ function compareRunBundles(left: RunLike, right: RunLike) {
   return {
     leftRunId: left.runId,
     rightRunId: right.runId,
-    trustMovement: Number((right.trust.confidence - left.trust.confidence).toFixed(2)),
+    trustMovement,
     differences,
+    delta: buildDecisionDelta(left, right, trustMovement, resolvedEvidenceTaskTitles),
     summary: {
       differenceCount: differences.length,
       leftTrust: left.trust.status,
@@ -958,6 +1009,237 @@ function compareRunBundles(left: RunLike, right: RunLike) {
       rightReadiness: right.readiness.status,
     },
   };
+}
+
+function buildDecisionDelta(
+  left: RunLike,
+  right: RunLike,
+  trustMovement: number,
+  resolvedEvidenceTaskTitles: string[],
+) {
+  const movementPoints = Math.round(trustMovement * 100);
+  const direction = trustDirection(left, right, movementPoints);
+  const leftMissingEvidence = uniqueStrings(left.sourceWorkspace?.missingEvidence ?? []);
+  const rightMissingEvidence = uniqueStrings(right.sourceWorkspace?.missingEvidence ?? []);
+  const leftBlockers = runBlockers(left);
+  const rightBlockers = runBlockers(right);
+  const closedGaps = uniqueStrings([
+    ...difference(leftMissingEvidence, rightMissingEvidence),
+    ...resolvedEvidenceTaskTitles,
+  ]);
+  const newGaps = difference(rightMissingEvidence, leftMissingEvidence);
+  const remainingGaps = rightMissingEvidence;
+  const closedBlockers = difference(leftBlockers, rightBlockers);
+  const newBlockers = difference(rightBlockers, leftBlockers);
+  const remainingBlockers = rightBlockers;
+  const sourceCountDelta = (right.sourceWorkspace?.sourceCount ?? 0) - (left.sourceWorkspace?.sourceCount ?? 0);
+  const sourceChunkDelta = (right.sourceWorkspace?.sourceChunkCount ?? 0) - (left.sourceWorkspace?.sourceChunkCount ?? 0);
+  const readinessChanged = left.readiness.status !== right.readiness.status;
+  const notableChanges = [
+    readinessChanged
+      ? `Readiness moved from ${left.readiness.status} to ${right.readiness.status}.`
+      : undefined,
+    movementPoints !== 0
+      ? `Trust confidence ${movementPoints > 0 ? "improved" : "regressed"} by ${Math.abs(movementPoints)} ${plural("point", Math.abs(movementPoints))}.`
+      : undefined,
+    sourceCountDelta !== 0
+      ? `Source coverage ${sourceCountDelta > 0 ? "increased" : "decreased"} by ${Math.abs(sourceCountDelta)} ${plural("source", Math.abs(sourceCountDelta))}.`
+      : undefined,
+    sourceChunkDelta !== 0
+      ? `Source chunks ${sourceChunkDelta > 0 ? "increased" : "decreased"} by ${Math.abs(sourceChunkDelta)} ${plural("chunk", Math.abs(sourceChunkDelta))}.`
+      : undefined,
+    closedGaps.length
+      ? `${closedGaps.length} evidence ${plural("gap", closedGaps.length)} closed.`
+      : undefined,
+    newGaps.length
+      ? `${newGaps.length} new evidence ${plural("gap", newGaps.length)} appeared.`
+      : undefined,
+    closedBlockers.length
+      ? `${closedBlockers.length} ${plural("blocker", closedBlockers.length)} cleared.`
+      : undefined,
+    newBlockers.length
+      ? `${newBlockers.length} new ${plural("blocker", newBlockers.length)} appeared.`
+      : undefined,
+    remainingGaps.length
+      ? `${remainingGaps.length} evidence ${plural("gap", remainingGaps.length)} still ${remainingGaps.length === 1 ? "needs" : "need"} closure.`
+      : undefined,
+    remainingBlockers.length
+      ? `${remainingBlockers.length} ${plural("blocker", remainingBlockers.length)} still ${remainingBlockers.length === 1 ? "needs" : "need"} resolution.`
+      : undefined,
+  ].filter((item): item is string => Boolean(item));
+
+  return {
+    verdict: decisionDeltaVerdict({
+      direction,
+      readinessChanged,
+      sourceCountDelta,
+      closedGaps,
+      closedBlockers,
+    }),
+    trustMovementLabel: formatTrustMovementLabel(movementPoints),
+    readinessMovement: {
+      from: left.readiness.status,
+      to: right.readiness.status,
+      changed: readinessChanged,
+    },
+    trustMovement: {
+      fromStatus: left.trust.status,
+      toStatus: right.trust.status,
+      fromConfidence: left.trust.confidence,
+      toConfidence: right.trust.confidence,
+      points: movementPoints,
+      direction,
+    },
+    sourceMovement: {
+      sourceCountDelta,
+      sourceChunkDelta,
+      closedGaps,
+      newGaps,
+      remainingGaps,
+    },
+    blockerMovement: {
+      closedBlockers,
+      newBlockers,
+      remainingBlockers,
+    },
+    notableChanges: notableChanges.length
+      ? notableChanges
+      : ["Only run identity changed; readiness, trust, sources, and blockers are stable."],
+    nextStep: decisionDeltaNextStep(right, remainingGaps, remainingBlockers, newBlockers),
+  };
+}
+
+function trustDirection(
+  left: RunLike,
+  right: RunLike,
+  movementPoints: number,
+): "improved" | "regressed" | "unchanged" {
+  if (movementPoints > 0) {
+    return "improved";
+  }
+
+  if (movementPoints < 0) {
+    return "regressed";
+  }
+
+  const leftRank = trustStatusRank(left.trust.status);
+  const rightRank = trustStatusRank(right.trust.status);
+  if (rightRank > leftRank) {
+    return "improved";
+  }
+
+  if (rightRank < leftRank) {
+    return "regressed";
+  }
+
+  return "unchanged";
+}
+
+function trustStatusRank(status: RunLike["trust"]["status"]) {
+  return { fail: 0, warn: 1, pass: 2 }[status];
+}
+
+function decisionDeltaVerdict(input: {
+  direction: "improved" | "regressed" | "unchanged";
+  readinessChanged: boolean;
+  sourceCountDelta: number;
+  closedGaps: string[];
+  closedBlockers: string[];
+}) {
+  const reasons = [
+    input.direction === "improved" ? "trust improved" : undefined,
+    input.direction === "regressed" ? "trust regressed" : undefined,
+    input.readinessChanged ? "readiness changed" : undefined,
+    input.sourceCountDelta > 0 ? "source coverage increased" : undefined,
+    input.sourceCountDelta < 0 ? "source coverage decreased" : undefined,
+    input.closedGaps.length ? "evidence gaps closed" : undefined,
+    input.closedBlockers.length ? "blockers cleared" : undefined,
+  ].filter((item): item is string => Boolean(item));
+
+  if (input.direction === "regressed") {
+    return `The newer run is weaker because ${joinSentence(reasons)}.`;
+  }
+
+  if (reasons.length > 0) {
+    return `The newer run is stronger because ${joinSentence(reasons)}.`;
+  }
+
+  return "The newer run is comparable because readiness, trust, sources, and blockers stayed stable.";
+}
+
+function decisionDeltaNextStep(
+  right: RunLike,
+  remainingGaps: string[],
+  remainingBlockers: string[],
+  newBlockers: string[],
+) {
+  if (newBlockers.length > 0) {
+    return `Resolve new blocker: ${newBlockers[0]}`;
+  }
+
+  if (remainingBlockers.length > 0) {
+    return `Resolve blocker: ${remainingBlockers[0]}`;
+  }
+
+  if (remainingGaps.length > 0) {
+    return `Attach evidence for: ${remainingGaps[0]}`;
+  }
+
+  if (right.readiness.status === "ready") {
+    return "Review claims and export the decision package.";
+  }
+
+  return right.readiness.nextAction ?? "Inspect the changed artifacts before acting.";
+}
+
+function formatTrustMovementLabel(points: number) {
+  if (points === 0) {
+    return "No trust movement";
+  }
+
+  return `${points > 0 ? "+" : ""}${points} pts`;
+}
+
+function runBlockers(run: RunLike) {
+  return uniqueStrings([
+    ...run.trust.blockingIssues,
+    ...(run.agents?.blockingIssues ?? []),
+  ]);
+}
+
+function uniqueStrings(values: string[]) {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const trimmed = value.trim();
+    const key = trimmed.toLowerCase();
+    if (!trimmed || seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function difference(left: string[], right: string[]) {
+  const rightKeys = new Set(right.map((item) => item.toLowerCase()));
+  return left.filter((item) => !rightKeys.has(item.toLowerCase()));
+}
+
+function plural(noun: string, count: number) {
+  return count === 1 ? noun : `${noun}s`;
+}
+
+function joinSentence(items: string[]) {
+  if (items.length <= 1) {
+    return items[0] ?? "the core decision state stayed stable";
+  }
+
+  if (items.length === 2) {
+    return `${items[0]} and ${items[1]}`;
+  }
+
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }
 
 function compareValue(pathName: string, left: unknown, right: unknown) {

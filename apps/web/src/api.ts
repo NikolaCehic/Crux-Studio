@@ -51,6 +51,46 @@ export type RunComparison = {
   rightRunId: string;
   trustMovement: number;
   differences: Array<{ path: string; left: unknown; right: unknown }>;
+  delta: DecisionDeltaReport;
+  summary?: {
+    differenceCount: number;
+    leftTrust: string;
+    rightTrust: string;
+    leftReadiness?: string;
+    rightReadiness?: string;
+  };
+};
+
+export type DecisionDeltaReport = {
+  verdict: string;
+  trustMovementLabel: string;
+  readinessMovement: {
+    from: string;
+    to: string;
+    changed: boolean;
+  };
+  trustMovement: {
+    fromStatus: string;
+    toStatus: string;
+    fromConfidence: number;
+    toConfidence: number;
+    points: number;
+    direction: "improved" | "regressed" | "unchanged";
+  };
+  sourceMovement: {
+    sourceCountDelta: number;
+    sourceChunkDelta: number;
+    closedGaps: string[];
+    newGaps: string[];
+    remainingGaps: string[];
+  };
+  blockerMovement: {
+    closedBlockers: string[];
+    newBlockers: string[];
+    remainingBlockers: string[];
+  };
+  notableChanges: string[];
+  nextStep: string;
 };
 
 export type ProviderRegistry = {

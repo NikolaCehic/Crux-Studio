@@ -19,15 +19,16 @@ Every phase must complete these steps before it is considered done:
 - Phase 11: Async Run Lifecycle, implemented in Studio v0.8.
 - Phase 12: Durable Lifecycle Recovery, implemented in Studio v0.9.
 - Phase 13: Evidence Gap Closure Loop, implemented in Studio v0.10.
+- Phase 14: Decision Delta Report, implemented in Studio v0.11.
 
 ## Next Phase
 
-Phase 14: Decision Delta Report.
+Phase 15: Exportable Decision Delta Package.
 
 Goal:
 
-- Make before/after run movement readable as a decision delta: what changed, why trust moved, which evidence closed gaps, and what still blocks readiness.
+- Make the before/after decision delta shareable as a reviewed Markdown package that can travel with the memo, source movement, blocker movement, and human review state.
 
 Why this is next:
 
-- Studio can now close evidence gaps and rerun. The next product gap is making the improvement legible enough that a user can confidently explain why the newer run is better.
+- Studio can now explain why a newer run is better. The next product gap is making that explanation exportable so a user can share the improvement, not just inspect it locally.

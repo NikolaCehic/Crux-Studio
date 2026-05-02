@@ -171,6 +171,20 @@ describe("Studio product workflow API", () => {
         leftRunId: run.runId,
         rightRunId: replayed.runId,
         trustMovement: expect.any(Number),
+        delta: expect.objectContaining({
+          verdict: expect.stringContaining("newer run"),
+          readinessMovement: expect.objectContaining({
+            from: "ready",
+            to: "ready",
+            changed: false,
+          }),
+          trustMovement: expect.objectContaining({
+            direction: "unchanged",
+            fromStatus: "pass",
+            toStatus: "pass",
+          }),
+          nextStep: expect.any(String),
+        }),
         summary: expect.objectContaining({
           leftReadiness: "ready",
           rightReadiness: "ready",
@@ -308,6 +322,43 @@ describe("Studio product workflow API", () => {
       }),
     );
     expect(compareResponse.json().trustMovement).toBeGreaterThan(0);
+    expect(compareResponse.json().delta).toEqual(
+      expect.objectContaining({
+        verdict: expect.stringContaining("newer run"),
+        readinessMovement: expect.objectContaining({
+          from: "usable_with_warnings",
+          to: "ready",
+          changed: true,
+        }),
+        trustMovement: expect.objectContaining({
+          direction: "improved",
+          fromStatus: "warn",
+          toStatus: "pass",
+        }),
+        sourceMovement: expect.objectContaining({
+          sourceCountDelta: 1,
+          sourceChunkDelta: 1,
+          closedGaps: expect.arrayContaining([
+            "Attach source material for the top evidence gap.",
+          ]),
+          remainingGaps: [],
+        }),
+        blockerMovement: expect.objectContaining({
+          closedBlockers: expect.arrayContaining([
+            "Offline mock run has no source inventory yet.",
+            "Research Scout: No source material is attached to the run.",
+          ]),
+          remainingBlockers: [],
+        }),
+        nextStep: "Review claims and export the decision package.",
+      }),
+    );
+    expect(compareResponse.json().delta.notableChanges).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("Readiness moved from usable_with_warnings to ready."),
+        expect.stringMatching(/\d+ evidence gaps? closed\./),
+      ]),
+    );
   });
 });
 

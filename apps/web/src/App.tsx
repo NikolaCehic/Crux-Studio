@@ -543,7 +543,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.10 · workspace
+              v0.11 · workspace
             </p>
           </div>
         </div>
@@ -2013,20 +2013,144 @@ function ReviewSummary({
 }
 
 function ComparisonSummary({ comparison }: { comparison: RunComparison }) {
+  const delta = comparison.delta;
+  const sourceDelta = formatSignedCount(delta.sourceMovement.sourceCountDelta, "source");
+  const chunkDelta = formatSignedCount(delta.sourceMovement.sourceChunkDelta, "chunk");
+  const readinessValue = `${delta.readinessMovement.from} to ${delta.readinessMovement.to}`;
+
   return (
-    <div className="mt-4 grid gap-2 rounded-lg border bg-muted/25 p-4 text-sm">
-      <h3 className="font-semibold">Run comparison</h3>
-      <p>Trust movement: {formatConfidence(comparison.trustMovement)}</p>
+    <section aria-label="Decision delta" className="mt-4 grid gap-4 rounded-lg border bg-muted/25 p-4 text-sm">
+      <div className="flex items-start gap-3">
+        <span className="grid size-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+          <GitCompareArrows className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-semibold">Decision delta</h3>
+            <Badge variant="secondary">{delta.trustMovement.direction}</Badge>
+          </div>
+          <p className="mt-1 text-muted-foreground">{delta.verdict}</p>
+        </div>
+      </div>
+
+      <dl className="grid gap-3 sm:grid-cols-2">
+        <DeltaMetric
+          label="Trust"
+          value={delta.trustMovementLabel}
+          detail={`${delta.trustMovement.fromStatus} to ${delta.trustMovement.toStatus}`}
+        />
+        <DeltaMetric
+          label="Readiness"
+          value={readinessValue}
+          detail={delta.readinessMovement.changed ? "state changed" : "state stable"}
+        />
+        <DeltaMetric
+          label="Sources"
+          value={sourceDelta}
+          detail={chunkDelta}
+        />
+        <DeltaMetric
+          label="Evidence gaps"
+          value={`${delta.sourceMovement.closedGaps.length} closed`}
+          detail={`${delta.sourceMovement.remainingGaps.length} remaining`}
+        />
+      </dl>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <DeltaList
+          empty="No closed evidence gaps in this comparison."
+          icon={CircleCheck}
+          items={delta.sourceMovement.closedGaps}
+          title="Closed evidence gaps"
+        />
+        <DeltaList
+          empty="No remaining blockers on the newer run."
+          icon={AlertTriangle}
+          items={delta.blockerMovement.remainingBlockers}
+          title="Remaining blockers"
+        />
+      </div>
+
+      <div className="grid gap-2 border-t pt-3">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="size-4 text-primary" />
+          <p className="font-semibold">Next step</p>
+        </div>
+        <p className="text-muted-foreground">{delta.nextStep}</p>
+      </div>
+
+      <div className="grid gap-2 border-t pt-3">
+        <p className="font-semibold">Changed artifact paths</p>
       <p className="break-all font-mono text-xs text-muted-foreground">
         {comparison.leftRunId} to {comparison.rightRunId}
       </p>
-      <ul className="list-inside list-disc">
+        <ul className="list-inside list-disc text-muted-foreground">
         {comparison.differences.map((difference) => (
           <li key={difference.path}>{difference.path}</li>
         ))}
       </ul>
     </div>
+    </section>
   );
+}
+
+function DeltaMetric({
+  detail,
+  label,
+  value,
+}: {
+  detail: string;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="grid gap-1 border-l pl-3">
+      <dt className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="break-words text-sm font-semibold leading-snug">{value}</dd>
+      <dd className="text-xs text-muted-foreground">{detail}</dd>
+    </div>
+  );
+}
+
+function DeltaList({
+  empty,
+  icon: Icon,
+  items,
+  title,
+}: {
+  empty: string;
+  icon: typeof AlertTriangle;
+  items: string[];
+  title: string;
+}) {
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center gap-2">
+        <Icon className="size-4 text-primary" />
+        <p className="font-semibold">{title}</p>
+      </div>
+      {items.length ? (
+        <ul className="list-inside list-disc space-y-1 text-muted-foreground">
+          {items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground">{empty}</p>
+      )}
+    </div>
+  );
+}
+
+function formatSignedCount(value: number, noun: string) {
+  if (value === 0) {
+    return `No ${noun} change`;
+  }
+
+  const suffix = Math.abs(value) === 1 ? noun : `${noun}s`;
+  return `${value > 0 ? "+" : ""}${value} ${suffix}`;
 }
 
 function renderDiagnostics(value: unknown) {

@@ -114,13 +114,14 @@ Studio supports replaying a run with the same question and context, comparing th
 - Recover lifecycle job history across local server restarts, resume queued jobs, and make interrupted running jobs retryable.
 - Convert missing evidence, blockers, and source-related agent next actions into evidence closure tasks.
 - Resolve evidence tasks with source notes, then automatically create a source pack, rerun, and compare the improved run.
+- Read a decision delta report that explains what changed between two runs, why trust moved, which evidence gaps closed, which blockers remain, and what to do next.
 - Start from canonical demo questions.
 - Inspect the memo, claims, evidence, sources, contradictions, uncertainty, bounded agents, council output, diagnostics, and trace.
 - See run readiness as ready, usable with warnings, or blocked.
 - Review claims with approve and reject actions.
 - Annotate evidence.
 - Replay runs with the same context.
-- Compare recent runs and see readiness, trust, agent, and source changes.
+- Compare recent runs and see a readable decision delta plus the changed artifact paths.
 - Open raw Claims, Evidence, Agents, and Trace JSON.
 - Export the memo as Markdown.
 - Export a reviewed memo that includes human review state.
@@ -274,6 +275,7 @@ It is intentionally not a hosted team control plane yet. Authentication, teams, 
 - [Phase 11 async lifecycle spec](docs/PHASE_11_ASYNC_RUN_LIFECYCLE_SPEC.md)
 - [Phase 12 durable lifecycle recovery spec](docs/PHASE_12_DURABLE_LIFECYCLE_RECOVERY_SPEC.md)
 - [Phase 13 evidence gap closure spec](docs/PHASE_13_EVIDENCE_GAP_CLOSURE_SPEC.md)
+- [Phase 14 decision delta report spec](docs/PHASE_14_DECISION_DELTA_REPORT_SPEC.md)
 - [Demo guide](docs/DEMO_GUIDE.md)
 - [Trace log](docs/TRACE_LOG.md)
 - [Changelog](CHANGELOG.md)

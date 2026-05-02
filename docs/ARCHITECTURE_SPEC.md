@@ -147,6 +147,8 @@ POST   /api/runs/:runId/replay
 POST   /api/runs/compare
 ```
 
+`POST /api/runs/compare` returns the raw changed paths plus a decision delta object with verdict, trust movement, readiness movement, source movement, evidence gap movement, blocker movement, notable changes, and next step.
+
 ## Run Bundle Shape For UI
 
 The UI should request a normalized run bundle:
@@ -181,6 +183,7 @@ v0.1:
 - queued lifecycle jobs recover after local server restart
 - interrupted running lifecycle jobs become failed and retryable after local server restart
 - evidence closure task resolution creates a local source pack and starts a lifecycle rerun
+- run comparison creates a decision delta report for before and after evidence closure movement
 - no hosted database yet
 
 v0.2:
