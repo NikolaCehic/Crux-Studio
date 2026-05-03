@@ -141,6 +141,7 @@ GET    /api/projects/:projectId/lineage
 GET    /api/projects/:projectId/decision-record
 GET    /api/projects/:projectId/export/decision-record-dossier
 GET    /api/projects/:projectId/acceptance-gate
+GET    /api/projects/:projectId/remediation-plan
 GET    /api/runs
 GET    /api/runs/:runId
 GET    /api/runs/:runId/artifacts/:artifact
@@ -163,6 +164,8 @@ POST   /api/runs/compare/export/decision-delta-package
 `GET /api/projects/:projectId/export/decision-record-dossier` returns a Markdown dossier with final recommendation, decision state, human review, lineage, key artifacts, and final memo.
 
 `GET /api/projects/:projectId/acceptance-gate` returns a derived actionability gate for the latest decision record with trust, readiness, source coverage, missing evidence, human review, lineage movement, blockers, export availability, weighted score, and recommended action.
+
+`GET /api/projects/:projectId/remediation-plan` returns a derived prioritized action plan for every non-passing acceptance check, including source attachment, evidence closure, review, rerun comparison, blocker resolution, regeneration, and dossier export actions.
 
 ## Run Bundle Shape For UI
 
@@ -204,6 +207,7 @@ v0.1:
 - project lineage derives a readable decision timeline from durable local state
 - decision record dossiers combine the latest run, review state, lineage, source summary, key artifacts, and memo into one exportable record
 - acceptance gates derive actionability status from the latest decision record without storing a second approval source of truth
+- remediation plans derive prioritized next actions from the acceptance gate without storing duplicate task state
 - no hosted database yet
 
 v0.2:

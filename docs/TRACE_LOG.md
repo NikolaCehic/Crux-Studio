@@ -1,5 +1,52 @@
 # Trace Log
 
+## 2026-05-03T11:38:00+02:00 - Phase 19 Acceptance Gate Remediation Planner
+
+Intent:
+
+- Implement the next productization phase under the required phase contract: full implementation, E2E/smoke tests, spec validation, artifacts, and next-phase handoff.
+- Turn acceptance-gate warnings and failures into a prioritized action plan that tells the user exactly how to move a dossier toward acceptance.
+
+Implemented:
+
+- Added `GET /api/projects/:projectId/remediation-plan`.
+- Added `remediation-plan` to provider capability reporting.
+- Added server-side remediation actions for source attachment, evidence closure, human review, rerun comparison, blocker resolution, run regeneration, and dossier export.
+- Added deterministic remediation sorting by priority, status severity, and gate-check order.
+- Added complete-state export guidance for accepted dossiers.
+- Added Studio API types and fetch helper for project remediation plans.
+- Added a Studio `Remediation plan` workbench section with status, action counts, priorities, rationale, evidence-gap context, and CTAs.
+- Added the Plan navigation item.
+- Refreshed remediation state after project selection and every project-changing action already used for lineage, dossiers, and acceptance gates.
+- Hardened project decision-state loading so dossiers, gates, and remediation plans load directly from linked project run IDs instead of scanning every Harness run.
+- Expanded local smoke to validate remediation status and action coverage after the real evidence-closure acceptance check.
+- Added `docs/PHASE_19_ACCEPTANCE_GATE_REMEDIATION_PLANNER_SPEC.md`.
+- Updated README, changelog, architecture spec, productization plan, and phase execution protocol.
+
+Verification:
+
+- Failing server, web, and smoke expectations were written first and passed after implementation.
+- Focused server workflow test passed: `pnpm --filter @crux-studio/server test -- product-workflow`.
+- Focused web workflow test passed: `pnpm --filter @crux-studio/web test -- App.test.tsx`.
+- Project decision-state hardening passed focused server workflow and typecheck.
+- Full Studio verification passed: `pnpm verify`.
+- Local smoke passed after restarting the local stack on the final code: `pnpm smoke:local`.
+- Final source-backed smoke job: `job-20260503093748-206e7146`.
+- Final source-backed smoke run: `20260503T093748Z-how-should-a-support-team-reduce-first-response-`.
+- Final evidence base run: `20260503T093748Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence task: `task-fc885dd9-12-adversarial-scenario-remove-evidence`.
+- Final evidence closure rerun job: `job-20260503093749-4f8d5203`.
+- Final evidence closure rerun: `20260503T093749Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence closure result: task `resolved`, rerun source count `1`, delta direction `improved`, closed gap count `1`, remaining blocker count `0`, comparison differences `7`, delta package bytes `6439`, lineage event count `20`, lineage delta count `1`, dossier approved claims `1`, dossier source count `1`, dossier package bytes `6146`, acceptance status `needs_review`, acceptance score `0.91`, acceptance checks `6 pass`, `2 warn`, `0 fail`, remediation status `action_required`, remediation actions `2`, remediation blocking actions `0`, remediation warning actions `2`.
+- Refreshed README screenshots:
+  - `docs/assets/crux-studio-workbench.png`
+  - `docs/assets/crux-studio-review-compare.png`
+
+Result:
+
+- Phase 19 is done.
+- Next phase: Phase 20 Guided Remediation Execution.
+
 ## 2026-05-03T10:51:00+02:00 - Phase 18 Decision Record Acceptance Gate
 
 Intent:

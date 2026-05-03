@@ -471,6 +471,34 @@ const mockAcceptanceGate = {
   ],
 };
 
+const mockRemediationPlan = {
+  projectId: "project-bakery",
+  projectName: "Bakery Operations",
+  latestRunId: "mock-replay",
+  status: "complete",
+  recommendedAction: "Export dossier and share with the decision owner.",
+  summary: {
+    totalActions: 1,
+    blockingActions: 0,
+    warningActions: 0,
+    readyActions: 1,
+  },
+  actions: [
+    {
+      id: "export-dossier",
+      gateCheckId: "export_package",
+      label: "Export accepted dossier",
+      status: "pass",
+      priority: "low",
+      actionType: "export_dossier",
+      rationale: "All acceptance checks passed. The dossier is ready to share.",
+      recommendedAction: "Export dossier and share with the decision owner.",
+      ctaLabel: "Export dossier",
+      href: "/api/projects/project-bakery/export/decision-record-dossier",
+    },
+  ],
+};
+
 describe("Crux Studio Ask workflow", () => {
   beforeEach(() => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
@@ -584,6 +612,13 @@ describe("Crux Studio Ask workflow", () => {
           });
         }
 
+        if (url.endsWith("/api/projects/project-bakery/remediation-plan")) {
+          return new Response(JSON.stringify(mockRemediationPlan), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
         if (url.endsWith("/api/projects/project-bakery/export/decision-record-dossier")) {
           return new Response(
             "# Crux Decision Record Dossier\n\n## Final Recommendation\n\nUse a staged approach.",
@@ -625,7 +660,7 @@ describe("Crux Studio Ask workflow", () => {
                 {
                   id: "mock",
                   status: "active",
-                  capabilities: ["ask", "inspect", "sources", "review", "compare", "agents", "lifecycle", "evidence-tasks", "lineage", "dossier", "acceptance-gate"],
+                  capabilities: ["ask", "inspect", "sources", "review", "compare", "agents", "lifecycle", "evidence-tasks", "lineage", "dossier", "acceptance-gate", "remediation-plan"],
                 },
               ],
             }),
@@ -823,6 +858,9 @@ describe("Crux Studio Ask workflow", () => {
     expect(screen.getByText("Ready to share")).toBeInTheDocument();
     expect(screen.getByText("Export dossier and share with the decision owner.")).toBeInTheDocument();
     expect(screen.getAllByText("Human review").length).toBeGreaterThan(0);
+    expect(await screen.findByRole("heading", { name: "Remediation plan" })).toBeInTheDocument();
+    expect(screen.getByText("Acceptance work is complete.")).toBeInTheDocument();
+    expect(screen.getByText("Export accepted dossier")).toBeInTheDocument();
     expect(screen.getByText("Decision Record Dossier")).toBeInTheDocument();
     expect(screen.getByText("Final recommendation")).toBeInTheDocument();
     expect(screen.getByText(/Approved claims: claim-1/)).toBeInTheDocument();

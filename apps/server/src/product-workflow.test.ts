@@ -234,6 +234,7 @@ describe("Studio product workflow API", () => {
     );
     expect(providers.json().providers[0].capabilities).toContain("agents");
     expect(providers.json().providers[0].capabilities).toContain("acceptance-gate");
+    expect(providers.json().providers[0].capabilities).toContain("remediation-plan");
   });
 
   it("turns evidence gaps into source tasks that can be resolved, rerun, and compared", async () => {
@@ -282,6 +283,50 @@ describe("Studio product workflow API", () => {
       ]),
     );
     const task = taskResponse.json()[0];
+
+    const draftRemediationResponse = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/remediation-plan`,
+    });
+    expect(draftRemediationResponse.statusCode).toBe(200);
+    const draftRemediationPlan = draftRemediationResponse.json();
+    expect(draftRemediationPlan).toEqual(
+      expect.objectContaining({
+        projectId: project.id,
+        projectName: "Support Ops",
+        latestRunId: draftRun.runId,
+        status: "blocked",
+        recommendedAction: "Attach source material and rerun the analysis.",
+        summary: expect.objectContaining({
+          blockingActions: expect.any(Number),
+          warningActions: expect.any(Number),
+        }),
+      }),
+    );
+    expect(draftRemediationPlan.summary.blockingActions).toBeGreaterThan(0);
+    expect(draftRemediationPlan.actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          gateCheckId: "source_coverage",
+          actionType: "attach_sources",
+          priority: "critical",
+          status: "fail",
+          ctaLabel: "Attach source pack",
+        }),
+        expect.objectContaining({
+          gateCheckId: "human_review",
+          actionType: "review_claims",
+          priority: "medium",
+          status: "warn",
+          ctaLabel: "Review claims",
+        }),
+        expect.objectContaining({
+          gateCheckId: "lineage_delta",
+          actionType: "compare_rerun",
+          status: "warn",
+        }),
+      ]),
+    );
 
     const resolutionResponse = await app.inject({
       method: "POST",
@@ -553,6 +598,34 @@ describe("Studio product workflow API", () => {
         expect.objectContaining({ id: "human_review", label: "Human review", status: "pass" }),
         expect.objectContaining({ id: "lineage_delta", status: "pass" }),
         expect.objectContaining({ id: "export_package", status: "pass" }),
+      ]),
+    );
+
+    const completeRemediationResponse = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/remediation-plan`,
+    });
+    expect(completeRemediationResponse.statusCode).toBe(200);
+    const completeRemediationPlan = completeRemediationResponse.json();
+    expect(completeRemediationPlan).toEqual(
+      expect.objectContaining({
+        projectId: project.id,
+        latestRunId: completedJob.run.runId,
+        status: "complete",
+        recommendedAction: "Export dossier and share with the decision owner.",
+        summary: expect.objectContaining({
+          blockingActions: 0,
+          warningActions: 0,
+        }),
+      }),
+    );
+    expect(completeRemediationPlan.actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          actionType: "export_dossier",
+          priority: "low",
+          ctaLabel: "Export dossier",
+        }),
       ]),
     );
   });

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.16.0 - 2026-05-03
+
+- Added a project-level remediation planner through `GET /api/projects/:projectId/remediation-plan`.
+- Remediation plans derive from the latest decision record and acceptance gate without storing duplicate task state.
+- Converted failed and warning gate checks into prioritized actions for source attachment, evidence closure, human review, rerun comparison, blocker resolution, run regeneration, and dossier export.
+- Added `remediation-plan` to provider capability reporting.
+- Added a Studio `Remediation plan` workbench section with status, action counts, priorities, rationale, and CTAs.
+- Hardened project decision-state loading so dossiers, gates, and remediation plans load directly from linked project run IDs instead of listing every Harness run.
+- Expanded local smoke to validate remediation status and action coverage after the real evidence-closure workflow.
+- Added the Phase 19 acceptance gate remediation planner spec artifact.
+
 ## 0.15.0 - 2026-05-03
 
 - Added a project-level decision record acceptance gate through `GET /api/projects/:projectId/acceptance-gate`.

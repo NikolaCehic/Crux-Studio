@@ -24,15 +24,16 @@ Every phase must complete these steps before it is considered done:
 - Phase 16: Decision Lineage Timeline, implemented in Studio v0.13.
 - Phase 17: Decision Record Dossier, implemented in Studio v0.14.
 - Phase 18: Decision Record Acceptance Gate, implemented in Studio v0.15.
+- Phase 19: Acceptance Gate Remediation Planner, implemented in Studio v0.16.
 
 ## Next Phase
 
-Phase 19: Acceptance Gate Remediation Planner.
+Phase 20: Guided Remediation Execution.
 
 Goal:
 
-- Turn failed and warning acceptance checks into prioritized remediation tasks that a user can resolve through source updates, review actions, reruns, or export steps.
+- Turn remediation-plan CTAs into guided in-product execution flows that preselect the right surface, preserve action context, and make it obvious when the action has changed the gate.
 
 Why this is next:
 
-- Studio now exposes whether a dossier is accepted, needs review, or blocked. The next product gap is making each non-passing check directly actionable so the user can move the project toward acceptance without manually translating gate output into work.
+- Studio now derives the prioritized remediation sequence. The next product gap is making those actions feel executable rather than navigational: source actions should land in the source workflow with context, review actions should focus the relevant artifact, comparison actions should run the comparison path, and export actions should complete the handoff.

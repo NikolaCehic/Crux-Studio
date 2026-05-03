@@ -213,6 +213,44 @@ export type DecisionAcceptanceGate = {
   };
 };
 
+export type DecisionRemediationPlan = {
+  projectId: string;
+  projectName: string;
+  latestRunId: string;
+  status: "complete" | "action_required" | "blocked";
+  recommendedAction: string;
+  summary: {
+    totalActions: number;
+    blockingActions: number;
+    warningActions: number;
+    readyActions: number;
+  };
+  actions: Array<{
+    id: string;
+    gateCheckId: DecisionAcceptanceGate["checks"][number]["id"];
+    label: string;
+    status: "pass" | "warn" | "fail";
+    priority: "critical" | "high" | "medium" | "low";
+    actionType:
+      | "attach_sources"
+      | "close_evidence_gap"
+      | "review_claims"
+      | "compare_rerun"
+      | "resolve_blocker"
+      | "regenerate_run"
+      | "export_dossier";
+    rationale: string;
+    recommendedAction: string;
+    ctaLabel: string;
+    href?: string;
+    target?: {
+      runId?: string;
+      evidenceGap?: string;
+      artifactPath?: string;
+    };
+  }>;
+};
+
 export type ProviderRegistry = {
   providers: Array<{
     id: string;
@@ -302,6 +340,13 @@ export async function getProjectAcceptanceGate(projectId: string): Promise<Decis
   return getJson(
     `/api/projects/${encodeURIComponent(projectId)}/acceptance-gate`,
     "Acceptance gate failed to load.",
+  );
+}
+
+export async function getProjectRemediationPlan(projectId: string): Promise<DecisionRemediationPlan> {
+  return getJson(
+    `/api/projects/${encodeURIComponent(projectId)}/remediation-plan`,
+    "Remediation plan failed to load.",
   );
 }
 

@@ -393,6 +393,7 @@ export function buildServer({
           "lineage",
           "dossier",
           "acceptance-gate",
+          "remediation-plan",
         ],
       },
     ],
@@ -550,6 +551,22 @@ export function buildServer({
         return buildDecisionAcceptanceGate(dossier);
       } catch {
         return reply.code(404).send({ message: "Acceptance gate failed to load." });
+      }
+    },
+  );
+
+  app.get<{ Params: { projectId: string } }>(
+    "/api/projects/:projectId/remediation-plan",
+    async (request, reply) => {
+      try {
+        const dossier = await buildProjectDecisionRecordDossier(request.params.projectId);
+        if (!dossier) {
+          return reply.code(404).send({ message: "Remediation plan requires a project run." });
+        }
+
+        return buildDecisionRemediationPlan(dossier, buildDecisionAcceptanceGate(dossier));
+      } catch {
+        return reply.code(404).send({ message: "Remediation plan failed to load." });
       }
     },
   );
@@ -923,22 +940,27 @@ export function buildServer({
       return null;
     }
 
-    const projectRuns = sortRunsNewestFirst(
-      await store.listProjectRuns(project.id, await provider.listRuns()),
+    const loadedRuns = await Promise.allSettled(
+      project.runIds.map(async (runId) =>
+        enrichRun(await provider.getRun(runId), await store.getRunLink(runId)),
+      ),
     );
-    const [bundles, sourcePacks, evidenceTasks, jobs] = await Promise.all([
-      Promise.all(projectRuns.map((run) => provider.getRun(run.runId))),
+    const runs = sortRunsNewestFirst(
+      loadedRuns
+        .filter((result): result is PromiseFulfilledResult<RunLike & { projectId?: string; sourcePackId?: string }> =>
+          result.status === "fulfilled",
+        )
+        .map((result) => result.value),
+    );
+    const [sourcePacks, evidenceTasks, jobs] = await Promise.all([
       store.listSourcePacks(project.id),
       Promise.all(
-        projectRuns.map((run) =>
+        runs.map((run) =>
           store.listEvidenceTasks(run.runId).catch(() => [] as StudioEvidenceTask[]),
         ),
       ).then((items) => items.flat()),
       listRunJobs(),
     ]);
-    const runs = bundles.map((bundle) =>
-      enrichRun(bundle, projectRuns.find((run) => run.runId === bundle.runId)),
-    );
     const lineage = buildDecisionLineage({
       project,
       runs,
@@ -1100,6 +1122,50 @@ type DecisionAcceptanceGate = {
     requiredPassCount: number;
     totalCount: number;
   };
+};
+
+type DecisionRemediationActionPriority = "critical" | "high" | "medium" | "low";
+
+type DecisionRemediationActionType =
+  | "attach_sources"
+  | "close_evidence_gap"
+  | "review_claims"
+  | "compare_rerun"
+  | "resolve_blocker"
+  | "regenerate_run"
+  | "export_dossier";
+
+type DecisionRemediationAction = {
+  id: string;
+  gateCheckId: DecisionAcceptanceCheck["id"];
+  label: string;
+  status: DecisionAcceptanceCheckStatus;
+  priority: DecisionRemediationActionPriority;
+  actionType: DecisionRemediationActionType;
+  rationale: string;
+  recommendedAction: string;
+  ctaLabel: string;
+  href?: string;
+  target?: {
+    runId?: string;
+    evidenceGap?: string;
+    artifactPath?: string;
+  };
+};
+
+type DecisionRemediationPlan = {
+  projectId: string;
+  projectName: string;
+  latestRunId: string;
+  status: "complete" | "action_required" | "blocked";
+  recommendedAction: string;
+  summary: {
+    totalActions: number;
+    blockingActions: number;
+    warningActions: number;
+    readyActions: number;
+  };
+  actions: DecisionRemediationAction[];
 };
 
 function enrichRun<T extends { runId: string }>(
@@ -1550,6 +1616,245 @@ function buildDecisionAcceptanceGate(dossier: DecisionRecordDossier): DecisionAc
       totalCount: checks.length,
     },
   };
+}
+
+function buildDecisionRemediationPlan(
+  dossier: DecisionRecordDossier,
+  gate: DecisionAcceptanceGate,
+): DecisionRemediationPlan {
+  const actions = gate.checks
+    .filter((check) => check.status !== "pass")
+    .map((check) => buildDecisionRemediationAction(dossier, check))
+    .sort(compareRemediationActions);
+
+  if (actions.length === 0) {
+    actions.push({
+      id: "export-dossier",
+      gateCheckId: "export_package",
+      label: "Export accepted dossier",
+      status: "pass",
+      priority: "low",
+      actionType: "export_dossier",
+      rationale: "Acceptance work is complete.",
+      recommendedAction: "Export dossier and share with the decision owner.",
+      ctaLabel: "Export dossier",
+      href: `/api/projects/${dossier.projectId}/export/decision-record-dossier`,
+      target: {
+        runId: dossier.latestRunId,
+        artifactPath: dossier.keyArtifacts.memo,
+      },
+    });
+  }
+
+  const blockingActions = actions.filter((action) => action.status === "fail").length;
+  const warningActions = actions.filter((action) => action.status === "warn").length;
+  const readyActions = actions.filter((action) => action.status === "pass").length;
+  const status =
+    blockingActions > 0
+      ? "blocked"
+      : warningActions > 0
+        ? "action_required"
+        : "complete";
+
+  return {
+    projectId: dossier.projectId,
+    projectName: dossier.projectName,
+    latestRunId: dossier.latestRunId,
+    status,
+    recommendedAction: actions[0]?.recommendedAction ?? gate.recommendedAction,
+    summary: {
+      totalActions: actions.length,
+      blockingActions,
+      warningActions,
+      readyActions,
+    },
+    actions,
+  };
+}
+
+function buildDecisionRemediationAction(
+  dossier: DecisionRecordDossier,
+  check: DecisionAcceptanceCheck,
+): DecisionRemediationAction {
+  const sourceRelated = isSourceRemediationCheck(check);
+  const priority = remediationPriorityFor(check);
+  const baseTarget = {
+    runId: dossier.latestRunId,
+    artifactPath: dossier.keyArtifacts.memo,
+  };
+
+  if (check.id === "source_coverage") {
+    return {
+      id: `${check.id}-remediation`,
+      gateCheckId: check.id,
+      label: "Attach source material",
+      status: check.status,
+      priority: "critical",
+      actionType: "attach_sources",
+      rationale: check.detail,
+      recommendedAction: check.nextAction,
+      ctaLabel: "Attach source pack",
+      href: "#ask",
+      target: baseTarget,
+    };
+  }
+
+  if (check.id === "missing_evidence") {
+    return {
+      id: `${check.id}-remediation`,
+      gateCheckId: check.id,
+      label: "Close missing evidence",
+      status: check.status,
+      priority: "high",
+      actionType: "close_evidence_gap",
+      rationale: check.detail,
+      recommendedAction: check.nextAction,
+      ctaLabel: "Close evidence gap",
+      href: "#artifacts",
+      target: {
+        ...baseTarget,
+        evidenceGap: dossier.sourceSummary.missingEvidence[0] ?? check.nextAction,
+      },
+    };
+  }
+
+  if (check.id === "human_review") {
+    return {
+      id: `${check.id}-remediation`,
+      gateCheckId: check.id,
+      label: "Review key claims",
+      status: check.status,
+      priority,
+      actionType: "review_claims",
+      rationale: check.detail,
+      recommendedAction: check.nextAction,
+      ctaLabel: "Review claims",
+      href: "#artifacts",
+      target: baseTarget,
+    };
+  }
+
+  if (check.id === "lineage_delta") {
+    return {
+      id: `${check.id}-remediation`,
+      gateCheckId: check.id,
+      label: "Compare rerun movement",
+      status: check.status,
+      priority,
+      actionType: "compare_rerun",
+      rationale: check.detail,
+      recommendedAction: check.nextAction,
+      ctaLabel: "Compare rerun",
+      href: "#lineage",
+      target: {
+        ...baseTarget,
+        artifactPath: dossier.lineage.latestDelta?.rightRunId ?? dossier.keyArtifacts.report,
+      },
+    };
+  }
+
+  if (check.id === "export_package") {
+    return {
+      id: `${check.id}-remediation`,
+      gateCheckId: check.id,
+      label: "Regenerate export package",
+      status: check.status,
+      priority: "critical",
+      actionType: "regenerate_run",
+      rationale: check.detail,
+      recommendedAction: check.nextAction,
+      ctaLabel: "Regenerate run",
+      href: "#memo",
+      target: baseTarget,
+    };
+  }
+
+  return {
+    id: `${check.id}-remediation`,
+    gateCheckId: check.id,
+    label: sourceRelated ? "Close evidence blocker" : "Resolve gate blocker",
+    status: check.status,
+    priority,
+    actionType: sourceRelated ? "close_evidence_gap" : "resolve_blocker",
+    rationale: check.detail,
+    recommendedAction: check.nextAction,
+    ctaLabel: sourceRelated ? "Close evidence gap" : "Resolve blocker",
+    href: sourceRelated ? "#artifacts" : "#acceptance",
+    target: {
+      ...baseTarget,
+      evidenceGap: sourceRelated ? check.nextAction : undefined,
+    },
+  };
+}
+
+function remediationPriorityFor(
+  check: Pick<DecisionAcceptanceCheck, "id" | "status">,
+): DecisionRemediationActionPriority {
+  if (check.status === "fail") {
+    return "critical";
+  }
+
+  if (check.id === "readiness" || check.id === "missing_evidence" || check.id === "trust_gate") {
+    return "high";
+  }
+
+  return "medium";
+}
+
+function isSourceRemediationCheck(check: Pick<DecisionAcceptanceCheck, "detail" | "nextAction">) {
+  return /\b(source|evidence|attach|missing|rerun)\b/i.test(`${check.detail} ${check.nextAction}`);
+}
+
+function compareRemediationActions(
+  left: DecisionRemediationAction,
+  right: DecisionRemediationAction,
+) {
+  const priorityOrder = remediationPriorityRank(left.priority) - remediationPriorityRank(right.priority);
+  if (priorityOrder !== 0) {
+    return priorityOrder;
+  }
+
+  const statusOrder = remediationStatusRank(left.status) - remediationStatusRank(right.status);
+  if (statusOrder !== 0) {
+    return statusOrder;
+  }
+
+  const checkOrder = remediationCheckRank(left.gateCheckId) - remediationCheckRank(right.gateCheckId);
+  if (checkOrder !== 0) {
+    return checkOrder;
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
+function remediationPriorityRank(priority: DecisionRemediationActionPriority) {
+  return {
+    critical: 0,
+    high: 1,
+    medium: 2,
+    low: 3,
+  }[priority];
+}
+
+function remediationStatusRank(status: DecisionAcceptanceCheckStatus) {
+  return {
+    fail: 0,
+    warn: 1,
+    pass: 2,
+  }[status];
+}
+
+function remediationCheckRank(id: DecisionAcceptanceCheck["id"]) {
+  return {
+    source_coverage: 0,
+    blockers: 1,
+    trust_gate: 2,
+    readiness: 3,
+    missing_evidence: 4,
+    human_review: 5,
+    lineage_delta: 6,
+    export_package: 7,
+  }[id];
 }
 
 function compareLineageEvents(left: DecisionLineageEvent, right: DecisionLineageEvent) {

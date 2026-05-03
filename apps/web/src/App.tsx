@@ -70,6 +70,7 @@ import {
   getProjectDecisionRecord,
   getRunJob,
   getProjectLineage,
+  getProjectRemediationPlan,
   getRun,
   listDemos,
   listEvidenceTasks,
@@ -87,6 +88,7 @@ import {
   type DecisionRecordDossier,
   type DecisionLineage,
   type DecisionLineageEvent,
+  type DecisionRemediationPlan,
   type ProviderRegistry,
   type DemoQuestion,
   type RunComparison,
@@ -159,6 +161,7 @@ const navItems = [
   { href: "#ask", icon: Plus, label: "New run" },
   { href: "#memo", icon: NotebookText, label: "Current run" },
   { href: "#acceptance", icon: ShieldCheck, label: "Gate" },
+  { href: "#remediation", icon: SearchCheck, label: "Plan" },
   { href: "#lineage", icon: GitBranch, label: "Lineage" },
   { href: "#artifacts", icon: Boxes, label: "Artifacts" },
   { href: "#trace", icon: SquareActivity, label: "Trace" },
@@ -186,6 +189,7 @@ export function App() {
   const [lineage, setLineage] = useState<DecisionLineage | null>(null);
   const [decisionRecord, setDecisionRecord] = useState<DecisionRecordDossier | null>(null);
   const [acceptanceGate, setAcceptanceGate] = useState<DecisionAcceptanceGate | null>(null);
+  const [remediationPlan, setRemediationPlan] = useState<DecisionRemediationPlan | null>(null);
   const [jobs, setJobs] = useState<RunJob[]>([]);
   const [activeJob, setActiveJob] = useState<RunJob | null>(null);
   const [activeTab, setActiveTab] = useState<ArtifactTab>("Brief");
@@ -195,10 +199,12 @@ export function App() {
   const [isLoadingLineage, setIsLoadingLineage] = useState(false);
   const [isLoadingDecisionRecord, setIsLoadingDecisionRecord] = useState(false);
   const [isLoadingAcceptanceGate, setIsLoadingAcceptanceGate] = useState(false);
+  const [isLoadingRemediationPlan, setIsLoadingRemediationPlan] = useState(false);
   const [isExportingDelta, setIsExportingDelta] = useState(false);
   const lineageRequestId = useRef(0);
   const decisionRecordRequestId = useRef(0);
   const acceptanceGateRequestId = useRef(0);
+  const remediationPlanRequestId = useRef(0);
 
   const selectedRun = bundle ?? run;
   const activeProvider = providers[0];
@@ -296,6 +302,7 @@ export function App() {
     void refreshLineage(selectedProjectId);
     void refreshDecisionRecord(selectedProjectId);
     void refreshAcceptanceGate(selectedProjectId);
+    void refreshRemediationPlan(selectedProjectId);
   }, [selectedProjectId]);
 
   useEffect(() => {
@@ -303,13 +310,16 @@ export function App() {
       return;
     }
 
-    if (acceptanceGate && decisionRecord && (lineage?.summary.runCount ?? 0) > 0) {
+    if (acceptanceGate && remediationPlan && decisionRecord && (lineage?.summary.runCount ?? 0) > 0) {
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
       if (!acceptanceGate && !isLoadingAcceptanceGate) {
         void refreshAcceptanceGate(selectedProjectId);
+      }
+      if (!remediationPlan && !isLoadingRemediationPlan) {
+        void refreshRemediationPlan(selectedProjectId);
       }
       if (!decisionRecord && !isLoadingDecisionRecord) {
         void refreshDecisionRecord(selectedProjectId);
@@ -323,6 +333,8 @@ export function App() {
   }, [
     acceptanceGate,
     isLoadingAcceptanceGate,
+    remediationPlan,
+    isLoadingRemediationPlan,
     decisionRecord,
     isLoadingDecisionRecord,
     isLoadingLineage,
@@ -485,11 +497,39 @@ export function App() {
     }
   }
 
+  async function refreshRemediationPlan(projectId: string) {
+    const requestId = remediationPlanRequestId.current + 1;
+    remediationPlanRequestId.current = requestId;
+
+    if (!projectId) {
+      setRemediationPlan(null);
+      setIsLoadingRemediationPlan(false);
+      return;
+    }
+
+    setIsLoadingRemediationPlan(true);
+    try {
+      const nextRemediationPlan = await getProjectRemediationPlan(projectId);
+      if (remediationPlanRequestId.current === requestId) {
+        setRemediationPlan(nextRemediationPlan);
+      }
+    } catch {
+      if (remediationPlanRequestId.current === requestId) {
+        setRemediationPlan(null);
+      }
+    } finally {
+      if (remediationPlanRequestId.current === requestId) {
+        setIsLoadingRemediationPlan(false);
+      }
+    }
+  }
+
   async function refreshProjectDecisionState(projectId: string) {
     await Promise.all([
       refreshLineage(projectId),
       refreshDecisionRecord(projectId),
       refreshAcceptanceGate(projectId),
+      refreshRemediationPlan(projectId),
     ]);
   }
 
@@ -723,7 +763,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.15 · workspace
+              v0.16 · workspace
             </p>
           </div>
         </div>
@@ -732,7 +772,7 @@ export function App() {
           <p className="px-2 font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
             Workspace
           </p>
-          <div className="grid grid-cols-2 gap-1 sm:grid-cols-6 lg:grid-cols-1">
+          <div className="grid grid-cols-2 gap-1 sm:grid-cols-7 lg:grid-cols-1">
             {navItems.map((item) => (
               <Button
                 asChild
@@ -933,7 +973,9 @@ export function App() {
             isLoadingBundle={isLoadingBundle}
             isLoadingDecisionRecord={isLoadingDecisionRecord}
             isLoadingLineage={isLoadingLineage}
+            isLoadingRemediationPlan={isLoadingRemediationPlan}
             lineage={lineage}
+            remediationPlan={remediationPlan}
             review={review}
             selectedRun={selectedRun}
             onAnnotateEvidence={handleAnnotateEvidence}
@@ -1457,7 +1499,9 @@ function MemoPanel({
   isLoadingBundle,
   isLoadingDecisionRecord,
   isLoadingLineage,
+  isLoadingRemediationPlan,
   lineage,
+  remediationPlan,
   review,
   selectedRun,
   onAnnotateEvidence,
@@ -1479,7 +1523,9 @@ function MemoPanel({
   isLoadingBundle: boolean;
   isLoadingDecisionRecord: boolean;
   isLoadingLineage: boolean;
+  isLoadingRemediationPlan: boolean;
   lineage: DecisionLineage | null;
+  remediationPlan: DecisionRemediationPlan | null;
   review: StudioReview | null;
   selectedRun: RunBundle | RunSummary | null;
   onAnnotateEvidence: (evidenceId: string) => void;
@@ -1543,6 +1589,10 @@ function MemoPanel({
             <AcceptanceGatePanel
               acceptanceGate={acceptanceGate}
               isLoading={isLoadingAcceptanceGate}
+            />
+            <RemediationPlanPanel
+              isLoading={isLoadingRemediationPlan}
+              remediationPlan={remediationPlan}
             />
             <DecisionRecordPanel
               decisionRecord={decisionRecord}
@@ -2323,6 +2373,180 @@ function AcceptanceGatePanel({
         </>
       )}
     </section>
+  );
+}
+
+function RemediationPlanPanel({
+  isLoading,
+  remediationPlan,
+}: {
+  isLoading: boolean;
+  remediationPlan: DecisionRemediationPlan | null;
+}) {
+  return (
+    <section
+      aria-label="Remediation plan"
+      className="mt-4 grid gap-4 rounded-lg border bg-muted/20 p-4 text-sm"
+      id="remediation"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+            <SearchCheck className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+              Action planner
+            </p>
+            <h3 className="mt-1 font-semibold">Remediation plan</h3>
+            <p className="mt-1 text-muted-foreground">
+              Prioritized work required to move the dossier through the gate.
+            </p>
+          </div>
+        </div>
+        {remediationPlan ? (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <RemediationStatusBadge status={remediationPlan.status} />
+            <Badge variant="outline">{remediationPlan.summary.totalActions} actions</Badge>
+          </div>
+        ) : null}
+      </div>
+
+      {isLoading ? (
+        <div className="grid gap-2">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-24" />
+        </div>
+      ) : !remediationPlan ? (
+        <p className="rounded-md border border-dashed bg-background p-3 text-muted-foreground">
+          Select a project with an acceptance gate to generate action guidance.
+        </p>
+      ) : (
+        <>
+          <div className="grid gap-3 rounded-md border bg-background p-3 2xl:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="font-semibold">
+                  {remediationPlan.status === "complete"
+                    ? "Acceptance work is complete."
+                    : remediationPlan.status === "blocked"
+                      ? "Blocking remediation required."
+                      : "Review actions before sharing."}
+                </h4>
+                <Badge variant="secondary">
+                  {remediationPlan.summary.blockingActions} blockers
+                </Badge>
+              </div>
+              <p className="mt-1 text-muted-foreground">
+                {remediationPlan.status === "complete"
+                  ? "Ready for final export and stakeholder handoff."
+                  : remediationPlan.recommendedAction}
+              </p>
+            </div>
+            <dl className="grid grid-cols-3 gap-2 text-center 2xl:min-w-64">
+              <RemediationMetric label="Critical" value={String(remediationPlan.summary.blockingActions)} />
+              <RemediationMetric label="Warning" value={String(remediationPlan.summary.warningActions)} />
+              <RemediationMetric label="Ready" value={String(remediationPlan.summary.readyActions)} />
+            </dl>
+          </div>
+
+          <ol className="grid gap-2">
+            {remediationPlan.actions.map((action) => (
+              <RemediationActionItem action={action} key={action.id} />
+            ))}
+          </ol>
+        </>
+      )}
+    </section>
+  );
+}
+
+function RemediationMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1 rounded-md border bg-muted/25 p-2">
+      <dt className="font-mono text-[0.65rem] font-semibold uppercase text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="font-semibold">{value}</dd>
+    </div>
+  );
+}
+
+function RemediationActionItem({
+  action,
+}: {
+  action: DecisionRemediationPlan["actions"][number];
+}) {
+  return (
+    <li className="rounded-md border bg-background p-3">
+      <div className="grid gap-3 2xl:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="flex min-w-0 items-start gap-3">
+          <AcceptanceCheckIcon status={action.status} />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-semibold">{action.label}</p>
+              <RemediationPriorityBadge priority={action.priority} />
+              <Badge variant="outline">{formatStatusText(action.gateCheckId)}</Badge>
+            </div>
+            <p className="mt-1 text-muted-foreground">{action.rationale}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Next: {action.recommendedAction}
+            </p>
+            {action.target?.evidenceGap ? (
+              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                Evidence gap: {action.target.evidenceGap}
+              </p>
+            ) : null}
+          </div>
+        </div>
+        {action.href ? (
+          <Button asChild className="w-full 2xl:w-auto" size="sm" variant="outline">
+            <a aria-label={`${action.label}: ${action.ctaLabel}`} href={action.href}>
+              <SearchCheck className="size-3.5" />
+              {action.ctaLabel}
+            </a>
+          </Button>
+        ) : (
+          <Button className="w-full 2xl:w-auto" disabled size="sm" type="button" variant="outline">
+            <SearchCheck className="size-3.5" />
+            {action.ctaLabel}
+          </Button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function RemediationStatusBadge({ status }: { status: DecisionRemediationPlan["status"] }) {
+  const statusClasses: Record<DecisionRemediationPlan["status"], string> = {
+    complete: "border-emerald-300 bg-emerald-100 text-emerald-900",
+    action_required: "border-amber-300 bg-amber-100 text-amber-950",
+    blocked: "border-red-300 bg-red-100 text-red-900",
+  };
+
+  return (
+    <Badge className={cn("shrink-0", statusClasses[status])} variant="outline">
+      {formatStatusText(status)}
+    </Badge>
+  );
+}
+
+function RemediationPriorityBadge({
+  priority,
+}: {
+  priority: DecisionRemediationPlan["actions"][number]["priority"];
+}) {
+  const priorityClasses: Record<DecisionRemediationPlan["actions"][number]["priority"], string> = {
+    critical: "border-red-300 bg-red-100 text-red-900",
+    high: "border-amber-300 bg-amber-100 text-amber-950",
+    medium: "border-sky-300 bg-sky-100 text-sky-950",
+    low: "border-emerald-300 bg-emerald-100 text-emerald-900",
+  };
+
+  return (
+    <Badge className={cn("shrink-0", priorityClasses[priority])} variant="outline">
+      {formatStatusText(priority)}
+    </Badge>
   );
 }
 

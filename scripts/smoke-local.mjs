@@ -273,6 +273,24 @@ async function main() {
       throw new Error(`Acceptance gate check ${requiredPassCheck} did not pass: ${JSON.stringify(check)}`);
     }
   }
+  const remediationPlan = await getJson(`${serverUrl}/api/projects/${project.id}/remediation-plan`);
+  if (!["complete", "action_required"].includes(remediationPlan.status)) {
+    throw new Error(`Remediation plan returned an unexpected status: ${JSON.stringify(remediationPlan)}`);
+  }
+  if (acceptanceGate.status === "needs_review" && remediationPlan.status !== "action_required") {
+    throw new Error(`Remediation plan should require action for a needs-review gate: ${JSON.stringify(remediationPlan)}`);
+  }
+  if (!Array.isArray(remediationPlan.actions) || remediationPlan.actions.length === 0) {
+    throw new Error(`Remediation plan did not return any next actions: ${JSON.stringify(remediationPlan)}`);
+  }
+  if (acceptanceGate.status === "needs_review") {
+    const planCheckIds = new Set(remediationPlan.actions.map((action) => action.gateCheckId));
+    for (const expectedCheckId of ["readiness", "missing_evidence"]) {
+      if (!planCheckIds.has(expectedCheckId)) {
+        throw new Error(`Remediation plan is missing ${expectedCheckId}: ${JSON.stringify(remediationPlan.actions)}`);
+      }
+    }
+  }
 
   console.log(JSON.stringify({
     ok: health.ok === true,
@@ -323,6 +341,10 @@ async function main() {
       acceptancePassCount: acceptanceGate.summary.passCount,
       acceptanceWarnCount: acceptanceGate.summary.warnCount,
       acceptanceFailCount: acceptanceGate.summary.failCount,
+      remediationStatus: remediationPlan.status,
+      remediationActionCount: remediationPlan.summary.totalActions,
+      remediationBlockingActions: remediationPlan.summary.blockingActions,
+      remediationWarningActions: remediationPlan.summary.warningActions,
     },
   }, null, 2));
 }
