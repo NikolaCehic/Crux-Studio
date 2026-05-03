@@ -28,6 +28,7 @@ The run is the product unit. Studio should not behave like a generic chatbot bec
 6. Review, annotate, and export the final memo.
 7. Compare a newer run to an older run.
 8. Follow guided remediation actions until the decision record is ready to share.
+9. Preserve a local evidence trail of remediation activity for accountable handoff.
 
 ## Product Principles
 
@@ -38,6 +39,7 @@ The run is the product unit. Studio should not behave like a generic chatbot bec
 - Source gaps are product information, not error noise.
 - Studio should help the user improve the analysis, not merely display it.
 - Remediation should launch the right workflow, not just describe the next task.
+- Remediation evidence should be visible in the decision record, not lost as transient UI state.
 
 ## Non-Goals
 

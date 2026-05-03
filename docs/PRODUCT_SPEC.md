@@ -38,6 +38,7 @@ The correct UX is a Run Studio:
 7. Compare a newer run to an older run.
 8. Assemble a decision record that can be shared without reconstructing separate tabs.
 9. Follow acceptance-gate remediation actions without leaving the workbench context.
+10. Preserve remediation action evidence for the final handoff.
 
 ## Non-Goals
 
@@ -56,6 +57,7 @@ The correct UX is a Run Studio:
 5. Review and rerun are first-class actions.
 6. Source gaps are product information, not error noise.
 7. The UI should help the user improve the analysis, not merely display it.
+8. Remediation evidence belongs in the decision record, not in memory only.
 
 ## Main Entities
 
@@ -74,6 +76,7 @@ The correct UX is a Run Studio:
 - Acceptance gate: derived readiness status for the latest project dossier.
 - Remediation plan: prioritized next actions for non-passing acceptance checks.
 - Guided remediation: active UI state that routes a remediation action into the matching workflow and watches for gate movement.
+- Remediation evidence ledger: local audit trail of guided remediation starts, workflow triggers, gate movement, completions, and dismissals.
 
 ## Success Criteria
 

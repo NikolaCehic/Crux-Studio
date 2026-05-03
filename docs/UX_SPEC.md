@@ -173,6 +173,7 @@ Capabilities:
 - launch guided source intake, claim review, replay, comparison, diagnostics, or export from each action
 - preserve active action context while the user works
 - show whether a refreshed gate changed after the action began
+- show a remediation evidence ledger with action starts, workflow triggers, gate movement, completions, and dismissals
 
 ## Design Direction
 

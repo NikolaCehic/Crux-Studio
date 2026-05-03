@@ -558,11 +558,46 @@ const mockActionRequiredRemediationPlan = {
   ],
 };
 
+type MockRemediationLedger = {
+  projectId: string;
+  projectName: string;
+  summary: {
+    eventCount: number;
+    actionCount: number;
+    gateMovementCount: number;
+    completedActionCount: number;
+  };
+  events: Array<{
+    id: string;
+    projectId: string;
+    createdAt: string;
+    eventType: string;
+    action?: { label?: string };
+    outcome?: { status?: string; detail?: string };
+  }>;
+};
+
+const emptyRemediationLedger: MockRemediationLedger = {
+  projectId: "project-bakery",
+  projectName: "Bakery Operations",
+  summary: {
+    eventCount: 0,
+    actionCount: 0,
+    gateMovementCount: 0,
+    completedActionCount: 0,
+  },
+  events: [],
+};
+
 let currentRemediationPlan = mockRemediationPlan;
+let currentRemediationLedger = emptyRemediationLedger;
+let recordedRemediationEvents: Array<{ eventType: string; action?: { label?: string } }> = [];
 
 describe("Crux Studio Ask workflow", () => {
   beforeEach(() => {
     currentRemediationPlan = mockRemediationPlan;
+    currentRemediationLedger = emptyRemediationLedger;
+    recordedRemediationEvents = [];
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     vi.stubGlobal(
       "URL",
@@ -681,6 +716,43 @@ describe("Crux Studio Ask workflow", () => {
           });
         }
 
+        if (url.endsWith("/api/projects/project-bakery/remediation-ledger/events") && init?.method === "POST") {
+          const event = JSON.parse(String(init.body));
+          recordedRemediationEvents.push(event);
+          currentRemediationLedger = {
+            ...currentRemediationLedger,
+            summary: {
+              eventCount: currentRemediationLedger.summary.eventCount + 1,
+              actionCount: 1,
+              gateMovementCount: currentRemediationLedger.summary.gateMovementCount + (event.eventType === "gate_changed" ? 1 : 0),
+              completedActionCount: currentRemediationLedger.summary.completedActionCount + (event.eventType === "action_completed" ? 1 : 0),
+            },
+            events: [
+              {
+                id: `ledger-${recordedRemediationEvents.length}`,
+                projectId: "project-bakery",
+                createdAt: "2026-05-01T10:05:00.000Z",
+                eventType: event.eventType,
+                action: event.action,
+                outcome: event.outcome,
+              },
+              ...currentRemediationLedger.events,
+            ],
+          };
+
+          return new Response(JSON.stringify(currentRemediationLedger.events[0]), {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url.endsWith("/api/projects/project-bakery/remediation-ledger")) {
+          return new Response(JSON.stringify(currentRemediationLedger), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
         if (url.endsWith("/api/projects/project-bakery/export/decision-record-dossier")) {
           return new Response(
             "# Crux Decision Record Dossier\n\n## Final Recommendation\n\nUse a staged approach.",
@@ -722,7 +794,7 @@ describe("Crux Studio Ask workflow", () => {
                 {
                   id: "mock",
                   status: "active",
-                  capabilities: ["ask", "inspect", "sources", "review", "compare", "agents", "lifecycle", "evidence-tasks", "lineage", "dossier", "acceptance-gate", "remediation-plan"],
+                  capabilities: ["ask", "inspect", "sources", "review", "compare", "agents", "lifecycle", "evidence-tasks", "lineage", "dossier", "acceptance-gate", "remediation-plan", "remediation-ledger"],
                 },
               ],
             }),
@@ -954,6 +1026,11 @@ describe("Crux Studio Ask workflow", () => {
     expect(await screen.findByRole("heading", { name: "Guided remediation" })).toBeInTheDocument();
     expect(screen.getAllByText("Close missing evidence").length).toBeGreaterThan(0);
     expect(screen.getByText("Watching gate: no gate change yet.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Remediation evidence ledger" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(recordedRemediationEvents.some((event) => event.eventType === "action_started")).toBe(true);
+    });
+    expect(recordedRemediationEvents.some((event) => event.eventType === "workflow_triggered")).toBe(true);
     expect(screen.getByLabelText("New source pack")).toHaveValue("Evidence for Close missing evidence");
     expect((screen.getByLabelText("Source content") as HTMLTextAreaElement).value).toContain(
       "Current response-time baseline",
@@ -964,6 +1041,15 @@ describe("Crux Studio Ask workflow", () => {
     await waitFor(() => {
       expect(screen.getByText("Gate changed after this action.")).toBeInTheDocument();
     });
+    await waitFor(() => {
+      expect(recordedRemediationEvents.some((event) => event.eventType === "gate_changed")).toBe(true);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark guided remediation complete" }));
+    await waitFor(() => {
+      expect(recordedRemediationEvents.some((event) => event.eventType === "action_completed")).toBe(true);
+    });
+    expect(screen.queryByRole("heading", { name: "Guided remediation" })).not.toBeInTheDocument();
   });
 
   it("guides review, replay, and comparison remediation actions", async () => {
@@ -972,14 +1058,14 @@ describe("Crux Studio Ask workflow", () => {
 
     expect(await screen.findByRole("heading", { name: "Remediation plan" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Review key claims: Review claims" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Review key claims: Review claims" }));
     expect(screen.getByRole("tab", { name: "Claims" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getAllByText("Review key claims").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Replay run" }));
     expect((await screen.findAllByText("mock-replay")).length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Compare rerun movement: Compare rerun" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Compare rerun movement: Compare rerun" }));
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
         "/api/runs/compare",

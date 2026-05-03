@@ -72,6 +72,7 @@ Ask a question
 -> Check the acceptance gate
 -> Follow the remediation plan
 -> Let guided remediation open the right workflow
+-> Preserve remediation evidence in the ledger
 -> Export the dossier or decision package
 ```
 
@@ -100,7 +101,7 @@ Claims can be approved or rejected. Evidence can be annotated. The goal is to mo
 
 ### Improve And Compare
 
-Studio supports replaying a run with the same question and context, comparing the latest runs, reading the decision lineage, assembling a dossier, checking whether the dossier is accepted, needs review, or is blocked, and following a guided remediation plan for whatever still needs work.
+Studio supports replaying a run with the same question and context, comparing the latest runs, reading the decision lineage, assembling a dossier, checking whether the dossier is accepted, needs review, or is blocked, and following a guided remediation plan for whatever still needs work. Guided remediation activity is preserved in a local evidence ledger so the final handoff can show which actions were attempted.
 
 <p align="center">
   <img src="docs/assets/crux-studio-review-compare.png" alt="Crux Studio guided remediation plan screenshot" />
@@ -108,7 +109,7 @@ Studio supports replaying a run with the same question and context, comparing th
 
 ### Accept And Export
 
-The decision record combines the final recommendation, readiness, trust, source coverage, human review, lineage movement, key artifacts, and memo into one Markdown package. The acceptance gate scores the dossier before sharing, and guided remediation turns weak evidence, blockers, missing review, rerun comparison, and export readiness into executable next actions.
+The decision record combines the final recommendation, readiness, trust, source coverage, human review, lineage movement, key artifacts, remediation evidence, and memo into one Markdown package. The acceptance gate scores the dossier before sharing, and guided remediation turns weak evidence, blockers, missing review, rerun comparison, and export readiness into executable next actions.
 
 ## Current Capabilities
 
@@ -130,6 +131,7 @@ The decision record combines the final recommendation, readiness, trust, source 
 - Check a project-level acceptance gate that says whether the latest dossier is ready to share, needs review, or is blocked.
 - Follow a project-level remediation plan that turns non-passing gate checks into prioritized source, evidence, review, rerun, blocker, regeneration, and export actions.
 - Start guided remediation from those actions: source gaps prefill source intake, review actions open claims, rerun actions replay the run, and comparison actions run the delta path.
+- See a project-level remediation evidence ledger that records guided starts, workflow triggers, gate movement, completions, and dismissals.
 - Export the decision record dossier as Markdown.
 - Start from canonical demo questions.
 - Inspect the memo, claims, evidence, sources, contradictions, uncertainty, bounded agents, council output, diagnostics, and trace.
@@ -269,7 +271,7 @@ Smoke check a running local Studio:
 pnpm smoke:local
 ```
 
-The smoke check creates source-backed lifecycle jobs, verifies durable lifecycle history, closes an evidence task with a source note, reruns Crux, compares the improved run, exports the delta package, validates the project lineage, validates the decision record dossier export, checks the acceptance gate, and validates the remediation plan.
+The smoke check creates source-backed lifecycle jobs, verifies durable lifecycle history, closes an evidence task with a source note, reruns Crux, compares the improved run, exports the delta package, validates the project lineage, validates the decision record dossier export, checks the acceptance gate, validates the remediation plan, records remediation ledger events, and verifies ledger evidence in the dossier export.
 
 The project is developed with a TDD-first workflow. Product behavior is covered across the provider package, server API, and web app.
 
@@ -298,6 +300,7 @@ It is intentionally not a hosted team control plane yet. Authentication, teams, 
 - [Phase 18 decision record acceptance gate spec](docs/PHASE_18_DECISION_RECORD_ACCEPTANCE_GATE_SPEC.md)
 - [Phase 19 acceptance gate remediation planner spec](docs/PHASE_19_ACCEPTANCE_GATE_REMEDIATION_PLANNER_SPEC.md)
 - [Phase 20 guided remediation execution spec](docs/PHASE_20_GUIDED_REMEDIATION_EXECUTION_SPEC.md)
+- [Phase 21 remediation evidence ledger spec](docs/PHASE_21_REMEDIATION_EVIDENCE_LEDGER_SPEC.md)
 - [Demo guide](docs/DEMO_GUIDE.md)
 - [Trace log](docs/TRACE_LOG.md)
 - [Changelog](CHANGELOG.md)

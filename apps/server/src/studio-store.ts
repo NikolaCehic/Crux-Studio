@@ -99,6 +99,46 @@ export type StudioReview = {
   };
 };
 
+export type StudioRemediationLedgerEventType =
+  | "action_started"
+  | "workflow_triggered"
+  | "gate_changed"
+  | "action_completed"
+  | "action_dismissed";
+
+export type StudioRemediationLedgerEvent = {
+  id: string;
+  projectId: string;
+  createdAt: string;
+  actor: string;
+  eventType: StudioRemediationLedgerEventType;
+  action: {
+    id: string;
+    gateCheckId: string;
+    label: string;
+    status: "pass" | "warn" | "fail";
+    priority: "critical" | "high" | "medium" | "low";
+    actionType: string;
+    target?: {
+      runId?: string;
+      evidenceGap?: string;
+      artifactPath?: string;
+    };
+  };
+  plan: {
+    latestRunId: string;
+    status: string;
+    signature: string;
+  };
+  outcome?: {
+    status: "watching" | "changed" | "cleared" | "completed" | "dismissed";
+    detail: string;
+    gateStatus?: string;
+    beforePlanSignature?: string;
+    afterPlanSignature?: string;
+  };
+};
+
 type StudioState = {
   projects: StudioProject[];
   sourcePacks: StudioSourcePack[];
@@ -106,6 +146,7 @@ type StudioState = {
   runJobs: StudioRunJob[];
   evidenceTasks: StudioEvidenceTask[];
   reviews: StudioReview[];
+  remediationLedgerEvents: StudioRemediationLedgerEvent[];
 };
 
 export type CreateSourcePackInput = {
@@ -146,6 +187,8 @@ export type StudioStore = {
     note: string;
   }): Promise<StudioReview>;
   getReview(runId: string): Promise<StudioReview>;
+  recordRemediationLedgerEvent(input: Omit<StudioRemediationLedgerEvent, "id" | "createdAt">): Promise<StudioRemediationLedgerEvent>;
+  listRemediationLedgerEvents(projectId: string): Promise<StudioRemediationLedgerEvent[]>;
 };
 
 type StoreOptions = {
@@ -159,6 +202,7 @@ const initialState = (): StudioState => ({
   runJobs: [],
   evidenceTasks: [],
   reviews: [],
+  remediationLedgerEvents: [],
 });
 
 export function createMemoryStudioStore(options: StoreOptions = {}): StudioStore {
@@ -348,6 +392,25 @@ class MemoryStudioStore implements StudioStore {
     };
   }
 
+  async recordRemediationLedgerEvent(
+    input: Omit<StudioRemediationLedgerEvent, "id" | "createdAt">,
+  ): Promise<StudioRemediationLedgerEvent> {
+    const event: StudioRemediationLedgerEvent = {
+      ...input,
+      id: `remediation-event-${this.state.remediationLedgerEvents.length + 1}-${slugify(input.action.id) || randomUUID()}`,
+      createdAt: this.now(),
+    };
+    this.state.remediationLedgerEvents = upsertById(this.state.remediationLedgerEvents, event);
+    await this.persist();
+    return event;
+  }
+
+  async listRemediationLedgerEvents(projectId: string): Promise<StudioRemediationLedgerEvent[]> {
+    return this.state.remediationLedgerEvents
+      .filter((item) => item.projectId === projectId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
   protected async persist(): Promise<void> {}
 
   protected enrichRun(run: RunSummary): RunSummary {
@@ -502,6 +565,16 @@ class FileStudioStore extends MemoryStudioStore {
     return this.readState(() => super.getReview(runId));
   }
 
+  override async recordRemediationLedgerEvent(
+    input: Omit<StudioRemediationLedgerEvent, "id" | "createdAt">,
+  ): Promise<StudioRemediationLedgerEvent> {
+    return this.writeState(() => super.recordRemediationLedgerEvent(input));
+  }
+
+  override async listRemediationLedgerEvents(projectId: string): Promise<StudioRemediationLedgerEvent[]> {
+    return this.readState(() => super.listRemediationLedgerEvents(projectId));
+  }
+
   private statePath() {
     return path.join(this.rootDir, "studio-state.json");
   }
@@ -545,6 +618,9 @@ function normalizeState(value: unknown): StudioState {
     runJobs: Array.isArray(partial.runJobs) ? partial.runJobs : [],
     evidenceTasks: Array.isArray(partial.evidenceTasks) ? partial.evidenceTasks : [],
     reviews: Array.isArray(partial.reviews) ? partial.reviews : [],
+    remediationLedgerEvents: Array.isArray(partial.remediationLedgerEvents)
+      ? partial.remediationLedgerEvents
+      : [],
   };
 }
 

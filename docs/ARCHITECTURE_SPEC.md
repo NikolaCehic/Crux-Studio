@@ -142,6 +142,8 @@ GET    /api/projects/:projectId/decision-record
 GET    /api/projects/:projectId/export/decision-record-dossier
 GET    /api/projects/:projectId/acceptance-gate
 GET    /api/projects/:projectId/remediation-plan
+GET    /api/projects/:projectId/remediation-ledger
+POST   /api/projects/:projectId/remediation-ledger/events
 GET    /api/runs
 GET    /api/runs/:runId
 GET    /api/runs/:runId/artifacts/:artifact
@@ -168,6 +170,10 @@ POST   /api/runs/compare/export/decision-delta-package
 `GET /api/projects/:projectId/remediation-plan` returns a derived prioritized action plan for every non-passing acceptance check, including source attachment, evidence closure, review, rerun comparison, blocker resolution, regeneration, and dossier export actions.
 
 Guided remediation execution is client-side orchestration over existing APIs. Studio stores the active guide in UI state, routes the user into source intake, claim review, replay, comparison, diagnostics, or export flows, then compares the latest remediation plan signature against the starting signature to show gate movement.
+
+`GET /api/projects/:projectId/remediation-ledger` returns the local evidence trail for guided remediation, including summary counts and recent events.
+
+`POST /api/projects/:projectId/remediation-ledger/events` records guided remediation evidence such as action starts, workflow triggers, gate movement, completions, and dismissals.
 
 ## Run Bundle Shape For UI
 
@@ -211,6 +217,7 @@ v0.1:
 - acceptance gates derive actionability status from the latest decision record without storing a second approval source of truth
 - remediation plans derive prioritized next actions from the acceptance gate without storing duplicate task state
 - guided remediation execution routes plan actions through existing workflows and watches refreshed gate movement in client state
+- remediation ledger events persist guided remediation evidence and are included in decision record dossiers
 - no hosted database yet
 
 v0.2:

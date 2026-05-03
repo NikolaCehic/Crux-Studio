@@ -172,6 +172,20 @@ export type DecisionRecordDossier = {
       rightRunId?: string;
     };
   };
+  remediationLedger?: {
+    eventCount: number;
+    actionCount: number;
+    gateMovementCount: number;
+    completedActionCount: number;
+    latestEventAt?: string;
+    recentEvents: Array<{
+      eventType: string;
+      actionLabel: string;
+      outcomeStatus?: string;
+      createdAt: string;
+      detail?: string;
+    }>;
+  };
   keyArtifacts: {
     input?: string;
     memo?: string;
@@ -249,6 +263,50 @@ export type DecisionRemediationPlan = {
       artifactPath?: string;
     };
   }>;
+};
+
+export type RemediationLedgerEventType =
+  | "action_started"
+  | "workflow_triggered"
+  | "gate_changed"
+  | "action_completed"
+  | "action_dismissed";
+
+export type RemediationLedgerEvent = {
+  id: string;
+  projectId: string;
+  createdAt: string;
+  actor: string;
+  eventType: RemediationLedgerEventType;
+  action: Pick<
+    DecisionRemediationPlan["actions"][number],
+    "id" | "gateCheckId" | "label" | "status" | "priority" | "actionType" | "target"
+  >;
+  plan: {
+    latestRunId: string;
+    status: string;
+    signature: string;
+  };
+  outcome?: {
+    status: "watching" | "changed" | "cleared" | "completed" | "dismissed";
+    detail: string;
+    gateStatus?: string;
+    beforePlanSignature?: string;
+    afterPlanSignature?: string;
+  };
+};
+
+export type DecisionRemediationLedger = {
+  projectId: string;
+  projectName: string;
+  summary: {
+    eventCount: number;
+    actionCount: number;
+    gateMovementCount: number;
+    completedActionCount: number;
+    latestEventAt?: string;
+  };
+  events: RemediationLedgerEvent[];
 };
 
 export type ProviderRegistry = {
@@ -347,6 +405,24 @@ export async function getProjectRemediationPlan(projectId: string): Promise<Deci
   return getJson(
     `/api/projects/${encodeURIComponent(projectId)}/remediation-plan`,
     "Remediation plan failed to load.",
+  );
+}
+
+export async function getProjectRemediationLedger(projectId: string): Promise<DecisionRemediationLedger> {
+  return getJson(
+    `/api/projects/${encodeURIComponent(projectId)}/remediation-ledger`,
+    "Remediation ledger failed to load.",
+  );
+}
+
+export async function recordRemediationLedgerEvent(
+  projectId: string,
+  input: Omit<RemediationLedgerEvent, "id" | "projectId" | "createdAt" | "actor"> & { actor?: string },
+): Promise<RemediationLedgerEvent> {
+  return postJson(
+    `/api/projects/${encodeURIComponent(projectId)}/remediation-ledger/events`,
+    input,
+    "Remediation ledger event failed to record.",
   );
 }
 

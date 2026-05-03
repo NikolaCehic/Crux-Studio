@@ -12,6 +12,7 @@ import {
   createMemoryStudioStore,
   type StudioEvidenceTask,
   type StudioProject,
+  type StudioRemediationLedgerEvent,
   type StudioRunJob,
   type StudioRunJobStatus,
   type StudioSourcePack,
@@ -67,6 +68,46 @@ const evidenceTaskResolutionSchema = z.object({
   sourceName: z.string().min(1).optional(),
   sourceContent: z.string().min(1),
   note: z.string().optional(),
+});
+
+const remediationLedgerEventSchema = z.object({
+  eventType: z.enum([
+    "action_started",
+    "workflow_triggered",
+    "gate_changed",
+    "action_completed",
+    "action_dismissed",
+  ]),
+  actor: z.string().min(1).optional(),
+  action: z.object({
+    id: z.string().min(1),
+    gateCheckId: z.string().min(1),
+    label: z.string().min(1),
+    status: z.enum(["pass", "warn", "fail"]),
+    priority: z.enum(["critical", "high", "medium", "low"]),
+    actionType: z.string().min(1),
+    target: z
+      .object({
+        runId: z.string().optional(),
+        evidenceGap: z.string().optional(),
+        artifactPath: z.string().optional(),
+      })
+      .optional(),
+  }),
+  plan: z.object({
+    latestRunId: z.string().min(1),
+    status: z.string().min(1),
+    signature: z.string().min(1),
+  }),
+  outcome: z
+    .object({
+      status: z.enum(["watching", "changed", "cleared", "completed", "dismissed"]),
+      detail: z.string().min(1),
+      gateStatus: z.string().optional(),
+      beforePlanSignature: z.string().optional(),
+      afterPlanSignature: z.string().optional(),
+    })
+    .optional(),
 });
 
 type BuildServerOptions = {
@@ -394,6 +435,7 @@ export function buildServer({
           "dossier",
           "acceptance-gate",
           "remediation-plan",
+          "remediation-ledger",
         ],
       },
     ],
@@ -568,6 +610,44 @@ export function buildServer({
       } catch {
         return reply.code(404).send({ message: "Remediation plan failed to load." });
       }
+    },
+  );
+
+  app.get<{ Params: { projectId: string } }>(
+    "/api/projects/:projectId/remediation-ledger",
+    async (request, reply) => {
+      const project = (await store.listProjects()).find((item) => item.id === request.params.projectId);
+      if (!project) {
+        return reply.code(404).send({ message: "Project not found." });
+      }
+
+      return buildDecisionRemediationLedger(
+        project,
+        await store.listRemediationLedgerEvents(project.id),
+      );
+    },
+  );
+
+  app.post<{ Params: { projectId: string } }>(
+    "/api/projects/:projectId/remediation-ledger/events",
+    async (request, reply) => {
+      const project = (await store.listProjects()).find((item) => item.id === request.params.projectId);
+      if (!project) {
+        return reply.code(404).send({ message: "Project not found." });
+      }
+
+      const parsed = remediationLedgerEventSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send({ message: "Remediation ledger event requires action, plan, and outcome context." });
+      }
+
+      return reply.code(201).send(await store.recordRemediationLedgerEvent({
+        ...parsed.data,
+        actor: parsed.data.actor ?? "Studio",
+        projectId: project.id,
+      }));
     },
   );
 
@@ -952,7 +1032,7 @@ export function buildServer({
         )
         .map((result) => result.value),
     );
-    const [sourcePacks, evidenceTasks, jobs] = await Promise.all([
+    const [sourcePacks, evidenceTasks, jobs, remediationLedgerEvents] = await Promise.all([
       store.listSourcePacks(project.id),
       Promise.all(
         runs.map((run) =>
@@ -960,6 +1040,7 @@ export function buildServer({
         ),
       ).then((items) => items.flat()),
       listRunJobs(),
+      store.listRemediationLedgerEvents(project.id),
     ]);
     const lineage = buildDecisionLineage({
       project,
@@ -976,6 +1057,7 @@ export function buildServer({
       evidenceTasks,
       jobs,
       lineage,
+      remediationLedger: buildDecisionRemediationLedger(project, remediationLedgerEvents),
     };
   }
 
@@ -992,6 +1074,7 @@ export function buildServer({
       sourcePacks: context.sourcePacks,
       review: await store.getReview(latestRun.runId),
       lineage: context.lineage,
+      remediationLedger: context.remediationLedger,
     });
   }
 
@@ -1051,6 +1134,19 @@ type DecisionLineage = {
   events: DecisionLineageEvent[];
 };
 
+type DecisionRemediationLedger = {
+  projectId: string;
+  projectName: string;
+  summary: {
+    eventCount: number;
+    actionCount: number;
+    gateMovementCount: number;
+    completedActionCount: number;
+    latestEventAt?: string;
+  };
+  events: StudioRemediationLedgerEvent[];
+};
+
 type DecisionRecordDossier = {
   projectId: string;
   projectName: string;
@@ -1078,6 +1174,20 @@ type DecisionRecordDossier = {
       leftRunId?: string;
       rightRunId?: string;
     };
+  };
+  remediationLedger: {
+    eventCount: number;
+    actionCount: number;
+    gateMovementCount: number;
+    completedActionCount: number;
+    latestEventAt?: string;
+    recentEvents: Array<{
+      eventType: StudioRemediationLedgerEvent["eventType"];
+      actionLabel: string;
+      outcomeStatus?: string;
+      createdAt: string;
+      detail?: string;
+    }>;
   };
   keyArtifacts: {
     input?: string;
@@ -1370,12 +1480,14 @@ function buildDecisionRecordDossier({
   sourcePacks,
   review,
   lineage,
+  remediationLedger,
 }: {
   project: StudioProject;
   latestRun: RunLike & { projectId?: string; sourcePackId?: string };
   sourcePacks: StudioSourcePack[];
   review: Awaited<ReturnType<StudioStore["getReview"]>>;
   lineage: DecisionLineage;
+  remediationLedger: DecisionRemediationLedger;
 }): DecisionRecordDossier {
   const latestDeltaEvent = [...lineage.events]
     .reverse()
@@ -1415,6 +1527,16 @@ function buildDecisionRecordDossier({
             rightRunId: latestDeltaEvent.rightRunId,
           }
         : undefined,
+    },
+    remediationLedger: {
+      ...remediationLedger.summary,
+      recentEvents: remediationLedger.events.slice(0, 5).map((event) => ({
+        eventType: event.eventType,
+        actionLabel: event.action.label,
+        outcomeStatus: event.outcome?.status,
+        createdAt: event.createdAt,
+        detail: event.outcome?.detail,
+      })),
     },
     keyArtifacts: {
       input: latestRun.paths.generatedInput,
@@ -1669,6 +1791,28 @@ function buildDecisionRemediationPlan(
       readyActions,
     },
     actions,
+  };
+}
+
+function buildDecisionRemediationLedger(
+  project: StudioProject,
+  events: StudioRemediationLedgerEvent[],
+): DecisionRemediationLedger {
+  const actionIds = new Set(events.map((event) => event.action.id));
+  const gateMovementCount = events.filter((event) => event.eventType === "gate_changed").length;
+  const completedActionCount = events.filter((event) => event.eventType === "action_completed").length;
+
+  return {
+    projectId: project.id,
+    projectName: project.name,
+    summary: {
+      eventCount: events.length,
+      actionCount: actionIds.size,
+      gateMovementCount,
+      completedActionCount,
+      latestEventAt: events[0]?.createdAt,
+    },
+    events,
   };
 }
 
@@ -2124,6 +2268,7 @@ ${right.memo}`;
 function renderDecisionRecordDossier(dossier: DecisionRecordDossier): string {
   const latestDelta = dossier.lineage.latestDelta;
   const review = dossier.review;
+  const ledger = dossier.remediationLedger;
 
   return `# Crux Decision Record Dossier
 
@@ -2161,6 +2306,22 @@ Evidence annotations: ${
 - Latest delta: ${latestDelta ? `${latestDelta.title}: ${latestDelta.detail}` : "none"}
 - Delta movement: ${latestDelta?.direction ?? "none"}
 - Delta next step: ${latestDelta?.nextStep ?? "none"}
+
+## Remediation Evidence Ledger
+
+- Events: ${ledger.eventCount}
+- Actions: ${ledger.actionCount}
+- Gate movements: ${ledger.gateMovementCount}
+- Completed actions: ${ledger.completedActionCount}
+- Latest event: ${ledger.latestEventAt ?? "none"}
+
+${ledger.recentEvents.length
+    ? ledger.recentEvents
+      .map((event) =>
+        `- ${formatStatusText(event.eventType)}: ${event.actionLabel} (${event.outcomeStatus ?? "recorded"})${event.detail ? `, ${event.detail}` : ""}`,
+      )
+      .join("\n")
+    : "- No remediation events recorded."}
 
 ## Key Artifacts
 
@@ -2436,6 +2597,14 @@ function plural(noun: string, count: number) {
 
 function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`;
+}
+
+function formatStatusText(value: string) {
+  return value
+    .split(/[_-]+/g)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
 }
 
 function joinSentence(items: string[]) {

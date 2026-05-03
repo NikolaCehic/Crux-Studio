@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.18.0 - 2026-05-03
+
+- Added a local remediation evidence ledger for guided remediation activity.
+- Added `GET /api/projects/:projectId/remediation-ledger` and `POST /api/projects/:projectId/remediation-ledger/events`.
+- Persisted ledger events in memory and file-backed Studio stores.
+- Added `remediation-ledger` to provider capability reporting.
+- Studio now records guided action starts, workflow triggers, gate movement, completions, and dismissals.
+- Added a `Remediation evidence ledger` workbench panel with event, action, gate movement, completion, and latest-event summaries.
+- Decision record dossier JSON and Markdown exports now include remediation ledger evidence.
+- Expanded local smoke to validate remediation ledger persistence and dossier export evidence.
+- Added the Phase 21 remediation evidence ledger spec artifact.
+
 ## 0.17.0 - 2026-05-03
 
 - Added guided remediation execution for project-level remediation actions.

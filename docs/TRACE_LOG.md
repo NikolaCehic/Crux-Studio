@@ -1,5 +1,52 @@
 # Trace Log
 
+## 2026-05-03T12:44:32+02:00 - Phase 21 Remediation Evidence Ledger
+
+Intent:
+
+- Implement the next productization phase under the required phase contract: full implementation, E2E-style workflow coverage, smoke validation, spec validation, durable artifacts, and next-phase handoff.
+- Persist guided remediation activity as local evidence so the decision record can explain which actions were started, which workflows were triggered, whether the gate moved, and which actions were completed or dismissed.
+- Apply the Impeccable product UI lens: `IMPECCABLE_PREFLIGHT: context=pass product=pass command_reference=pass shape=not_required image_gate=skipped:Phase 21 extends the existing workbench audit surface, no separate visual concept or generated imagery is needed mutation=open`.
+
+Implemented:
+
+- Added remediation ledger event persistence to the in-memory and file-backed Studio stores.
+- Added `GET /api/projects/:projectId/remediation-ledger`.
+- Added `POST /api/projects/:projectId/remediation-ledger/events`.
+- Added `remediation-ledger` to provider capability reporting.
+- Added remediation ledger summary and recent events to decision record dossier JSON.
+- Added a `Remediation Evidence Ledger` section to Markdown dossier export.
+- Added Studio API types and fetch helpers for remediation ledger reads and writes.
+- Added a Studio `Remediation evidence ledger` panel beside the remediation plan.
+- Studio now records `action_started`, `workflow_triggered`, `gate_changed`, `action_completed`, and `action_dismissed` events from guided remediation.
+- Added a guided remediation `Mark complete` action.
+- Expanded local smoke to record remediation ledger events, validate ledger counts, and confirm dossier export includes ledger evidence.
+- Added `docs/PHASE_21_REMEDIATION_EVIDENCE_LEDGER_SPEC.md`.
+- Updated README, changelog, product context, product spec, UX spec, architecture spec, demo guide, productization plan, and phase execution protocol.
+
+Verification:
+
+- Red server and web expectations were written first for ledger endpoints, ledger UI, event recording, dossier inclusion, and smoke evidence.
+- Focused server workflow test passed: `pnpm --filter @crux-studio/server test -- product-workflow`.
+- Focused web workflow test passed: `pnpm --filter @crux-studio/web test -- src/App.test.tsx`.
+- Full Studio verification passed: `pnpm verify`.
+- Local smoke passed against the local Crux Harness provider: `pnpm smoke:local`.
+- Final source-backed smoke job: `job-20260503103926-f52a42ff`.
+- Final source-backed smoke run: `20260503T103926Z-how-should-a-support-team-reduce-first-response-`.
+- Final evidence base run: `20260503T103927Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence task: `task-57efae64-12-adversarial-scenario-remove-evidence`.
+- Final evidence closure rerun job: `job-20260503103927-8634266f`.
+- Final evidence closure rerun: `20260503T103927Z-what-evidence-would-make-the-support-first-respo-2`.
+- Final evidence closure result: task `resolved`, rerun source count `1`, delta direction `improved`, closed gap count `1`, remaining blocker count `0`, comparison differences `7`, delta package bytes `6441`, lineage event count `20`, lineage delta count `1`, dossier approved claims `1`, dossier source count `1`, dossier package bytes `6309`, acceptance status `needs_review`, acceptance score `0.91`, acceptance checks `6 pass`, `2 warn`, `0 fail`, remediation status `action_required`, remediation actions `2`, remediation blocking actions `0`, remediation warning actions `2`, remediation ledger events `2`, remediation ledger completed actions `1`.
+- Refreshed README screenshots:
+  - `docs/assets/crux-studio-workbench.png`
+  - `docs/assets/crux-studio-review-compare.png`
+
+Result:
+
+- Phase 21 is done.
+- Next phase: Phase 22 Decision Handoff Review Pack.
+
 ## 2026-05-03T12:15:00+02:00 - Phase 20 Guided Remediation Execution
 
 Intent:

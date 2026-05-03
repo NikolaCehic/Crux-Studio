@@ -291,6 +291,46 @@ async function main() {
       }
     }
   }
+  const smokeRemediationAction = remediationPlan.actions[0];
+  const smokePlanSignature = `${remediationPlan.status}|${remediationPlan.summary.blockingActions}|${remediationPlan.summary.warningActions}|${remediationPlan.summary.readyActions}`;
+  await postJson(`${serverUrl}/api/projects/${project.id}/remediation-ledger/events`, {
+    eventType: "action_started",
+    actor: "Local smoke",
+    action: smokeRemediationAction,
+    plan: {
+      latestRunId: remediationPlan.latestRunId,
+      status: remediationPlan.status,
+      signature: smokePlanSignature,
+    },
+    outcome: {
+      status: "watching",
+      detail: "Local smoke started the latest remediation action.",
+      gateStatus: acceptanceGate.status,
+    },
+  });
+  await postJson(`${serverUrl}/api/projects/${project.id}/remediation-ledger/events`, {
+    eventType: "action_completed",
+    actor: "Local smoke",
+    action: smokeRemediationAction,
+    plan: {
+      latestRunId: remediationPlan.latestRunId,
+      status: remediationPlan.status,
+      signature: smokePlanSignature,
+    },
+    outcome: {
+      status: "completed",
+      detail: "Local smoke recorded the remediation action outcome.",
+      gateStatus: acceptanceGate.status,
+    },
+  });
+  const remediationLedger = await getJson(`${serverUrl}/api/projects/${project.id}/remediation-ledger`);
+  if (remediationLedger.summary.eventCount < 2 || remediationLedger.summary.completedActionCount < 1) {
+    throw new Error(`Remediation ledger did not preserve smoke events: ${JSON.stringify(remediationLedger)}`);
+  }
+  const dossierPackageWithLedger = await getText(`${serverUrl}/api/projects/${project.id}/export/decision-record-dossier`);
+  if (!dossierPackageWithLedger.includes("## Remediation Evidence Ledger")) {
+    throw new Error("Decision record dossier package is missing remediation ledger evidence.");
+  }
 
   console.log(JSON.stringify({
     ok: health.ok === true,
@@ -345,6 +385,8 @@ async function main() {
       remediationActionCount: remediationPlan.summary.totalActions,
       remediationBlockingActions: remediationPlan.summary.blockingActions,
       remediationWarningActions: remediationPlan.summary.warningActions,
+      remediationLedgerEventCount: remediationLedger.summary.eventCount,
+      remediationLedgerCompletedActions: remediationLedger.summary.completedActionCount,
     },
   }, null, 2));
 }

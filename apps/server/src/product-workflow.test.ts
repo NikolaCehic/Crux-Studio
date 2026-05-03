@@ -327,6 +327,61 @@ describe("Studio product workflow API", () => {
         }),
       ]),
     );
+    const sourceAction = draftRemediationPlan.actions.find(
+      (action: { actionType: string }) => action.actionType === "attach_sources",
+    );
+    expect(sourceAction).toBeDefined();
+
+    const startedLedgerResponse = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/remediation-ledger/events`,
+      payload: {
+        eventType: "action_started",
+        actor: "Nikola",
+        action: sourceAction,
+        plan: {
+          latestRunId: draftRemediationPlan.latestRunId,
+          status: draftRemediationPlan.status,
+          signature: "draft-remediation-signature",
+        },
+        outcome: {
+          status: "watching",
+          detail: "Opened source intake for a source-coverage blocker.",
+        },
+      },
+    });
+    expect(startedLedgerResponse.statusCode).toBe(201);
+
+    const initialLedgerResponse = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/remediation-ledger`,
+    });
+    expect(initialLedgerResponse.statusCode).toBe(200);
+    expect(initialLedgerResponse.json()).toEqual(
+      expect.objectContaining({
+        projectId: project.id,
+        projectName: "Support Ops",
+        summary: expect.objectContaining({
+          eventCount: 1,
+          actionCount: 1,
+          gateMovementCount: 0,
+          completedActionCount: 0,
+        }),
+        events: expect.arrayContaining([
+          expect.objectContaining({
+            eventType: "action_started",
+            action: expect.objectContaining({
+              id: sourceAction.id,
+              label: sourceAction.label,
+              actionType: sourceAction.actionType,
+            }),
+            outcome: expect.objectContaining({
+              status: "watching",
+            }),
+          }),
+        ]),
+      }),
+    );
 
     const resolutionResponse = await app.inject({
       method: "POST",
@@ -628,6 +683,100 @@ describe("Studio product workflow API", () => {
         }),
       ]),
     );
+
+    const gateChangedLedgerResponse = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/remediation-ledger/events`,
+      payload: {
+        eventType: "gate_changed",
+        actor: "Nikola",
+        action: sourceAction,
+        plan: {
+          latestRunId: completeRemediationPlan.latestRunId,
+          status: completeRemediationPlan.status,
+          signature: "complete-remediation-signature",
+        },
+        outcome: {
+          status: "cleared",
+          detail: "Acceptance gate reached a complete remediation state after evidence closure.",
+          gateStatus: acceptanceGate.status,
+        },
+      },
+    });
+    expect(gateChangedLedgerResponse.statusCode).toBe(201);
+
+    const completedLedgerResponse = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/remediation-ledger/events`,
+      payload: {
+        eventType: "action_completed",
+        actor: "Nikola",
+        action: sourceAction,
+        plan: {
+          latestRunId: completeRemediationPlan.latestRunId,
+          status: completeRemediationPlan.status,
+          signature: "complete-remediation-signature",
+        },
+        outcome: {
+          status: "completed",
+          detail: "Source remediation completed and preserved for the decision record.",
+          gateStatus: acceptanceGate.status,
+        },
+      },
+    });
+    expect(completedLedgerResponse.statusCode).toBe(201);
+
+    const finalLedgerResponse = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/remediation-ledger`,
+    });
+    expect(finalLedgerResponse.statusCode).toBe(200);
+    const finalLedger = finalLedgerResponse.json();
+    expect(finalLedger.summary).toEqual(
+      expect.objectContaining({
+        eventCount: 3,
+        actionCount: 1,
+        gateMovementCount: 1,
+        completedActionCount: 1,
+      }),
+    );
+    expect(finalLedger.events[0]).toEqual(
+      expect.objectContaining({
+        eventType: "action_completed",
+        outcome: expect.objectContaining({
+          status: "completed",
+          gateStatus: "accepted",
+        }),
+      }),
+    );
+
+    const ledgerDossierResponse = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/decision-record`,
+    });
+    expect(ledgerDossierResponse.statusCode).toBe(200);
+    expect(ledgerDossierResponse.json().remediationLedger).toEqual(
+      expect.objectContaining({
+        eventCount: 3,
+        gateMovementCount: 1,
+        completedActionCount: 1,
+        recentEvents: expect.arrayContaining([
+          expect.objectContaining({
+            eventType: "action_completed",
+            actionLabel: sourceAction.label,
+          }),
+        ]),
+      }),
+    );
+
+    const ledgerDossierExportResponse = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/export/decision-record-dossier`,
+    });
+    expect(ledgerDossierExportResponse.statusCode).toBe(200);
+    expect(ledgerDossierExportResponse.body).toContain("## Remediation Evidence Ledger");
+    expect(ledgerDossierExportResponse.body).toContain("Events: 3");
+    expect(ledgerDossierExportResponse.body).toContain(sourceAction.label);
   });
 });
 

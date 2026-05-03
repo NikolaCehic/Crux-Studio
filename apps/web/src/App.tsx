@@ -70,6 +70,7 @@ import {
   getProjectDecisionRecord,
   getRunJob,
   getProjectLineage,
+  getProjectRemediationLedger,
   getProjectRemediationPlan,
   getRun,
   listDemos,
@@ -80,6 +81,7 @@ import {
   listRuns,
   listSourcePacks,
   replayRun,
+  recordRemediationLedgerEvent,
   retryRunJob,
   resolveEvidenceTask,
   reviewClaim,
@@ -88,7 +90,10 @@ import {
   type DecisionRecordDossier,
   type DecisionLineage,
   type DecisionLineageEvent,
+  type DecisionRemediationLedger,
   type DecisionRemediationPlan,
+  type RemediationLedgerEvent,
+  type RemediationLedgerEventType,
   type ProviderRegistry,
   type DemoQuestion,
   type RunComparison,
@@ -203,6 +208,7 @@ export function App() {
   const [decisionRecord, setDecisionRecord] = useState<DecisionRecordDossier | null>(null);
   const [acceptanceGate, setAcceptanceGate] = useState<DecisionAcceptanceGate | null>(null);
   const [remediationPlan, setRemediationPlan] = useState<DecisionRemediationPlan | null>(null);
+  const [remediationLedger, setRemediationLedger] = useState<DecisionRemediationLedger | null>(null);
   const [activeRemediationGuide, setActiveRemediationGuide] = useState<ActiveRemediationGuide | null>(null);
   const [jobs, setJobs] = useState<RunJob[]>([]);
   const [activeJob, setActiveJob] = useState<RunJob | null>(null);
@@ -214,11 +220,14 @@ export function App() {
   const [isLoadingDecisionRecord, setIsLoadingDecisionRecord] = useState(false);
   const [isLoadingAcceptanceGate, setIsLoadingAcceptanceGate] = useState(false);
   const [isLoadingRemediationPlan, setIsLoadingRemediationPlan] = useState(false);
+  const [isLoadingRemediationLedger, setIsLoadingRemediationLedger] = useState(false);
   const [isExportingDelta, setIsExportingDelta] = useState(false);
   const lineageRequestId = useRef(0);
   const decisionRecordRequestId = useRef(0);
   const acceptanceGateRequestId = useRef(0);
   const remediationPlanRequestId = useRef(0);
+  const remediationLedgerRequestId = useRef(0);
+  const recordedRemediationOutcomeKeys = useRef<Set<string>>(new Set());
 
   const selectedRun = bundle ?? run;
   const activeProvider = providers[0];
@@ -321,7 +330,9 @@ export function App() {
     void refreshDecisionRecord(selectedProjectId);
     void refreshAcceptanceGate(selectedProjectId);
     void refreshRemediationPlan(selectedProjectId);
+    void refreshRemediationLedger(selectedProjectId);
     setActiveRemediationGuide(null);
+    recordedRemediationOutcomeKeys.current.clear();
   }, [selectedProjectId]);
 
   useEffect(() => {
@@ -329,7 +340,7 @@ export function App() {
       return;
     }
 
-    if (acceptanceGate && remediationPlan && decisionRecord && (lineage?.summary.runCount ?? 0) > 0) {
+    if (acceptanceGate && remediationPlan && remediationLedger && decisionRecord && (lineage?.summary.runCount ?? 0) > 0) {
       return;
     }
 
@@ -339,6 +350,9 @@ export function App() {
       }
       if (!remediationPlan && !isLoadingRemediationPlan) {
         void refreshRemediationPlan(selectedProjectId);
+      }
+      if (!remediationLedger && !isLoadingRemediationLedger) {
+        void refreshRemediationLedger(selectedProjectId);
       }
       if (!decisionRecord && !isLoadingDecisionRecord) {
         void refreshDecisionRecord(selectedProjectId);
@@ -354,12 +368,40 @@ export function App() {
     isLoadingAcceptanceGate,
     remediationPlan,
     isLoadingRemediationPlan,
+    remediationLedger,
+    isLoadingRemediationLedger,
     decisionRecord,
     isLoadingDecisionRecord,
     isLoadingLineage,
     lineage?.summary.runCount,
     selectedProject?.runIds.length,
     selectedProjectId,
+  ]);
+
+  useEffect(() => {
+    if (!activeRemediationGuide || !remediationGuideOutcome || remediationGuideOutcome.status === "watching") {
+      return;
+    }
+
+    const afterPlanSignature = remediationPlan ? remediationPlanSignature(remediationPlan) : "no-plan";
+    const key = `${activeRemediationGuide.action.id}:${remediationGuideOutcome.status}:${afterPlanSignature}`;
+    if (recordedRemediationOutcomeKeys.current.has(key)) {
+      return;
+    }
+
+    recordedRemediationOutcomeKeys.current.add(key);
+    void recordRemediationEvent("gate_changed", activeRemediationGuide.action, {
+      status: remediationGuideOutcome.status,
+      detail: remediationGuideOutcome.label,
+      gateStatus: acceptanceGate?.status,
+      beforePlanSignature: activeRemediationGuide.planSignature,
+      afterPlanSignature,
+    });
+  }, [
+    acceptanceGate?.status,
+    activeRemediationGuide,
+    remediationGuideOutcome,
+    remediationPlan,
   ]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -543,12 +585,40 @@ export function App() {
     }
   }
 
+  async function refreshRemediationLedger(projectId: string) {
+    const requestId = remediationLedgerRequestId.current + 1;
+    remediationLedgerRequestId.current = requestId;
+
+    if (!projectId) {
+      setRemediationLedger(null);
+      setIsLoadingRemediationLedger(false);
+      return;
+    }
+
+    setIsLoadingRemediationLedger(true);
+    try {
+      const nextRemediationLedger = await getProjectRemediationLedger(projectId);
+      if (remediationLedgerRequestId.current === requestId) {
+        setRemediationLedger(nextRemediationLedger);
+      }
+    } catch {
+      if (remediationLedgerRequestId.current === requestId) {
+        setRemediationLedger(null);
+      }
+    } finally {
+      if (remediationLedgerRequestId.current === requestId) {
+        setIsLoadingRemediationLedger(false);
+      }
+    }
+  }
+
   async function refreshProjectDecisionState(projectId: string) {
     await Promise.all([
       refreshLineage(projectId),
       refreshDecisionRecord(projectId),
       refreshAcceptanceGate(projectId),
       refreshRemediationPlan(projectId),
+      refreshRemediationLedger(projectId),
     ]);
   }
 
@@ -751,6 +821,35 @@ export function App() {
     }
   }
 
+  async function recordRemediationEvent(
+    eventType: RemediationLedgerEventType,
+    action: RemediationAction,
+    outcome?: RemediationLedgerEvent["outcome"],
+  ) {
+    if (!selectedProjectId || !remediationPlan) {
+      return;
+    }
+
+    try {
+      const event = await recordRemediationLedgerEvent(selectedProjectId, {
+        eventType,
+        actor: "Studio",
+        action,
+        plan: {
+          latestRunId: remediationPlan.latestRunId,
+          status: remediationPlan.status,
+          signature: remediationPlanSignature(remediationPlan),
+        },
+        outcome,
+      });
+      setRemediationLedger((current) =>
+        appendRemediationLedgerEvent(current, event, selectedProject?.name ?? remediationPlan.projectName),
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Remediation ledger event failed to record.");
+    }
+  }
+
   function handleStartRemediationAction(action: RemediationAction) {
     setActiveRemediationGuide({
       action,
@@ -758,6 +857,14 @@ export function App() {
       planSignature: remediationPlan ? remediationPlanSignature(remediationPlan) : "",
     });
     setError(null);
+    void recordRemediationEvent("action_started", action, {
+      status: "watching",
+      detail: "Guided remediation started in Studio.",
+    });
+    void recordRemediationEvent("workflow_triggered", action, {
+      status: "watching",
+      detail: remediationWorkflowDetail(action),
+    });
 
     if (action.actionType === "attach_sources" || action.actionType === "close_evidence_gap") {
       const evidenceGap = action.target?.evidenceGap ?? action.recommendedAction;
@@ -794,6 +901,32 @@ export function App() {
     }
   }
 
+  function handleClearRemediationGuide() {
+    if (activeRemediationGuide) {
+      void recordRemediationEvent("action_dismissed", activeRemediationGuide.action, {
+        status: "dismissed",
+        detail: "Guided remediation was cleared before being marked complete.",
+        gateStatus: acceptanceGate?.status,
+        beforePlanSignature: activeRemediationGuide.planSignature,
+        afterPlanSignature: remediationPlan ? remediationPlanSignature(remediationPlan) : undefined,
+      });
+    }
+    setActiveRemediationGuide(null);
+  }
+
+  function handleCompleteRemediationGuide() {
+    if (activeRemediationGuide) {
+      void recordRemediationEvent("action_completed", activeRemediationGuide.action, {
+        status: "completed",
+        detail: "Guided remediation was marked complete in Studio.",
+        gateStatus: acceptanceGate?.status,
+        beforePlanSignature: activeRemediationGuide.planSignature,
+        afterPlanSignature: remediationPlan ? remediationPlanSignature(remediationPlan) : undefined,
+      });
+    }
+    setActiveRemediationGuide(null);
+  }
+
   async function handleExportDeltaPackage() {
     if (!comparison) {
       return;
@@ -825,7 +958,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.17 · workspace
+              v0.18 · workspace
             </p>
           </div>
         </div>
@@ -1035,10 +1168,12 @@ export function App() {
             isLoadingBundle={isLoadingBundle}
             isLoadingDecisionRecord={isLoadingDecisionRecord}
             isLoadingLineage={isLoadingLineage}
+            isLoadingRemediationLedger={isLoadingRemediationLedger}
             isLoadingRemediationPlan={isLoadingRemediationPlan}
             lineage={lineage}
             remediationGuide={activeRemediationGuide}
             remediationGuideOutcome={remediationGuideOutcome}
+            remediationLedger={remediationLedger}
             remediationPlan={remediationPlan}
             review={review}
             selectedRun={selectedRun}
@@ -1050,7 +1185,8 @@ export function App() {
             onResolveEvidenceTask={(taskId) => void handleResolveEvidenceTask(taskId)}
             onReviewClaim={handleReviewClaim}
             onStartRemediationAction={handleStartRemediationAction}
-            onClearRemediationGuide={() => setActiveRemediationGuide(null)}
+            onClearRemediationGuide={handleClearRemediationGuide}
+            onCompleteRemediationGuide={handleCompleteRemediationGuide}
           />
         </section>
       </section>
@@ -1565,10 +1701,12 @@ function MemoPanel({
   isLoadingBundle,
   isLoadingDecisionRecord,
   isLoadingLineage,
+  isLoadingRemediationLedger,
   isLoadingRemediationPlan,
   lineage,
   remediationGuide,
   remediationGuideOutcome,
+  remediationLedger,
   remediationPlan,
   review,
   selectedRun,
@@ -1581,6 +1719,7 @@ function MemoPanel({
   onReviewClaim,
   onStartRemediationAction,
   onClearRemediationGuide,
+  onCompleteRemediationGuide,
 }: {
   activeTab: ArtifactTab;
   acceptanceGate: DecisionAcceptanceGate | null;
@@ -1593,10 +1732,12 @@ function MemoPanel({
   isLoadingBundle: boolean;
   isLoadingDecisionRecord: boolean;
   isLoadingLineage: boolean;
+  isLoadingRemediationLedger: boolean;
   isLoadingRemediationPlan: boolean;
   lineage: DecisionLineage | null;
   remediationGuide: ActiveRemediationGuide | null;
   remediationGuideOutcome: RemediationGuideOutcome | null;
+  remediationLedger: DecisionRemediationLedger | null;
   remediationPlan: DecisionRemediationPlan | null;
   review: StudioReview | null;
   selectedRun: RunBundle | RunSummary | null;
@@ -1609,6 +1750,7 @@ function MemoPanel({
   onReviewClaim: (claimId: string, status: "approved" | "rejected") => void;
   onStartRemediationAction: (action: RemediationAction) => void;
   onClearRemediationGuide: () => void;
+  onCompleteRemediationGuide: () => void;
 }) {
   return (
     <Card id="memo" aria-live="polite" className="min-h-[680px]">
@@ -1670,7 +1812,12 @@ function MemoPanel({
               isLoading={isLoadingRemediationPlan}
               remediationPlan={remediationPlan}
               onClearGuide={onClearRemediationGuide}
+              onCompleteGuide={onCompleteRemediationGuide}
               onStartAction={onStartRemediationAction}
+            />
+            <RemediationLedgerPanel
+              isLoading={isLoadingRemediationLedger}
+              ledger={remediationLedger}
             />
             <DecisionRecordPanel
               decisionRecord={decisionRecord}
@@ -2460,6 +2607,7 @@ function RemediationPlanPanel({
   isLoading,
   remediationPlan,
   onClearGuide,
+  onCompleteGuide,
   onStartAction,
 }: {
   guide: ActiveRemediationGuide | null;
@@ -2467,6 +2615,7 @@ function RemediationPlanPanel({
   isLoading: boolean;
   remediationPlan: DecisionRemediationPlan | null;
   onClearGuide: () => void;
+  onCompleteGuide: () => void;
   onStartAction: (action: RemediationAction) => void;
 }) {
   return (
@@ -2514,6 +2663,7 @@ function RemediationPlanPanel({
               guide={guide}
               outcome={guideOutcome}
               onClear={onClearGuide}
+              onComplete={onCompleteGuide}
             />
           ) : null}
 
@@ -2563,10 +2713,12 @@ function RemediationGuidePanel({
   guide,
   outcome,
   onClear,
+  onComplete,
 }: {
   guide: ActiveRemediationGuide;
   outcome: RemediationGuideOutcome | null;
   onClear: () => void;
+  onComplete: () => void;
 }) {
   const action = guide.action;
   const label = outcome?.label ?? "Watching gate: no gate change yet.";
@@ -2586,9 +2738,21 @@ function RemediationGuidePanel({
             <Badge variant="outline">Started {formatTimestamp(guide.startedAt)}</Badge>
           </div>
         </div>
-        <Button aria-label="Clear guided remediation" size="icon-sm" type="button" variant="ghost" onClick={onClear}>
-          <X className="size-3.5" />
-        </Button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Button
+            aria-label="Mark guided remediation complete"
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={onComplete}
+          >
+            <Check className="size-3.5" />
+            Mark complete
+          </Button>
+          <Button aria-label="Clear guided remediation" size="icon-sm" type="button" variant="ghost" onClick={onClear}>
+            <X className="size-3.5" />
+          </Button>
+        </div>
       </div>
       <div className="grid gap-2 rounded-md border bg-muted/25 p-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -2724,6 +2888,119 @@ function RemediationPriorityBadge({
   );
 }
 
+function RemediationLedgerPanel({
+  isLoading,
+  ledger,
+}: {
+  isLoading: boolean;
+  ledger: DecisionRemediationLedger | null;
+}) {
+  return (
+    <section
+      aria-label="Remediation evidence ledger"
+      className="mt-4 grid gap-4 rounded-lg border bg-muted/20 p-4 text-sm"
+      id="remediation-ledger"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+            <SquareActivity className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+              Audit trail
+            </p>
+            <h3 className="mt-1 font-semibold">Remediation evidence ledger</h3>
+            <p className="mt-1 text-muted-foreground">
+              Recorded remediation actions and gate movement for this project.
+            </p>
+          </div>
+        </div>
+        {ledger ? (
+          <Badge variant="outline">{ledger.summary.eventCount} events</Badge>
+        ) : null}
+      </div>
+
+      {isLoading ? (
+        <div className="grid gap-2">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-24" />
+        </div>
+      ) : !ledger ? (
+        <p className="rounded-md border border-dashed bg-background p-3 text-muted-foreground">
+          Select a project to load remediation history.
+        </p>
+      ) : (
+        <>
+          <dl className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <RemediationMetric label="Events" value={String(ledger.summary.eventCount)} />
+            <RemediationMetric label="Actions" value={String(ledger.summary.actionCount)} />
+            <RemediationMetric label="Gate Moves" value={String(ledger.summary.gateMovementCount)} />
+            <RemediationMetric label="Complete" value={String(ledger.summary.completedActionCount)} />
+          </dl>
+
+          {ledger.events.length ? (
+            <ol className="grid gap-2">
+              {ledger.events.slice(0, 5).map((event) => (
+                <RemediationLedgerEventItem event={event} key={event.id} />
+              ))}
+            </ol>
+          ) : (
+            <p className="rounded-md border border-dashed bg-background p-3 text-muted-foreground">
+              No remediation events recorded yet.
+            </p>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function RemediationLedgerEventItem({ event }: { event: RemediationLedgerEvent }) {
+  return (
+    <li className="rounded-md border bg-background p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <RemediationLedgerEventBadge eventType={event.eventType} />
+            <p className="font-semibold">{event.action.label}</p>
+            {event.outcome?.status ? (
+              <Badge variant="outline">{formatStatusText(event.outcome.status)}</Badge>
+            ) : null}
+          </div>
+          <p className="mt-1 text-muted-foreground">
+            {event.outcome?.detail ?? remediationLedgerEventDetail(event.eventType)}
+          </p>
+          {event.outcome?.gateStatus ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Gate: {formatStatusText(event.outcome.gateStatus)}
+            </p>
+          ) : null}
+        </div>
+        <time className="shrink-0 font-mono text-[0.68rem] uppercase text-muted-foreground">
+          {formatTimestamp(event.createdAt)}
+        </time>
+      </div>
+    </li>
+  );
+}
+
+function RemediationLedgerEventBadge({ eventType }: { eventType: RemediationLedgerEventType }) {
+  const classes: Record<RemediationLedgerEventType, string> = {
+    action_started: "border-sky-300 bg-sky-100 text-sky-950",
+    workflow_triggered: "border-sky-300 bg-sky-100 text-sky-950",
+    gate_changed: "border-amber-300 bg-amber-100 text-amber-950",
+    action_completed: "border-emerald-300 bg-emerald-100 text-emerald-900",
+    action_dismissed: "border-muted-foreground/25 bg-muted text-muted-foreground",
+  };
+
+  return (
+    <Badge className={cn("shrink-0", classes[eventType])} variant="outline">
+      {formatStatusText(eventType)}
+    </Badge>
+  );
+}
+
 function DecisionRecordPanel({
   decisionRecord,
   isLoading,
@@ -2799,7 +3076,7 @@ function DecisionRecordPanel({
             </div>
           </div>
 
-          <div className="grid gap-3 2xl:grid-cols-3">
+          <div className="grid gap-3 2xl:grid-cols-4">
             <LineageMetric
               label="Human review"
               value={`Approved claims: ${decisionRecord.review.approvedClaims.join(", ") || "none"}`}
@@ -2807,6 +3084,10 @@ function DecisionRecordPanel({
             <LineageMetric
               label="Decision movement"
               value={latestDelta ? `${latestDelta.title}: ${latestDelta.label}` : "No decision delta yet"}
+            />
+            <LineageMetric
+              label="Remediation ledger"
+              value={`${decisionRecord.remediationLedger?.eventCount ?? 0} events, ${decisionRecord.remediationLedger?.gateMovementCount ?? 0} gate moves`}
             />
             <LineageMetric
               label="Next step"
@@ -3545,6 +3826,65 @@ function remediationGuideStep(action: RemediationAction): string {
   }
 
   return "Diagnostics are selected. Resolve the blocker, refresh the project state, then watch the gate.";
+}
+
+function remediationWorkflowDetail(action: RemediationAction): string {
+  if (action.actionType === "attach_sources" || action.actionType === "close_evidence_gap") {
+    return "Studio opened source intake with the remediation context.";
+  }
+
+  if (action.actionType === "review_claims") {
+    return "Studio opened claim review for the remediation action.";
+  }
+
+  if (action.actionType === "compare_rerun") {
+    return "Studio triggered latest-run comparison for the remediation action.";
+  }
+
+  if (action.actionType === "regenerate_run") {
+    return "Studio replayed the active run for the remediation action.";
+  }
+
+  if (action.actionType === "export_dossier") {
+    return "Studio preserved the dossier export handoff.";
+  }
+
+  return "Studio opened the diagnostic remediation surface.";
+}
+
+function remediationLedgerEventDetail(eventType: RemediationLedgerEventType): string {
+  const details: Record<RemediationLedgerEventType, string> = {
+    action_started: "Guided remediation started.",
+    workflow_triggered: "Studio opened the matching workflow.",
+    gate_changed: "The remediation plan changed after the action started.",
+    action_completed: "The remediation action was marked complete.",
+    action_dismissed: "The remediation guide was cleared.",
+  };
+
+  return details[eventType];
+}
+
+function appendRemediationLedgerEvent(
+  current: DecisionRemediationLedger | null,
+  event: RemediationLedgerEvent,
+  projectName: string,
+): DecisionRemediationLedger {
+  const events = [event, ...(current?.events ?? []).filter((item) => item.id !== event.id)]
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const actionIds = new Set(events.map((item) => item.action.id));
+
+  return {
+    projectId: event.projectId,
+    projectName: current?.projectName ?? projectName,
+    summary: {
+      eventCount: events.length,
+      actionCount: actionIds.size,
+      gateMovementCount: events.filter((item) => item.eventType === "gate_changed").length,
+      completedActionCount: events.filter((item) => item.eventType === "action_completed").length,
+      latestEventAt: events[0]?.createdAt,
+    },
+    events,
+  };
 }
 
 function scrollToSection(sectionId: string) {
