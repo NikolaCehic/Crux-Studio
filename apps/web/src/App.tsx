@@ -66,6 +66,7 @@ import {
   createProject,
   createSourcePack,
   exportDecisionDeltaPackage,
+  getProjectAcceptanceGate,
   getProjectDecisionRecord,
   getRunJob,
   getProjectLineage,
@@ -82,6 +83,7 @@ import {
   resolveEvidenceTask,
   reviewClaim,
   startRunJob,
+  type DecisionAcceptanceGate,
   type DecisionRecordDossier,
   type DecisionLineage,
   type DecisionLineageEvent,
@@ -156,6 +158,7 @@ const policyHelp: Record<SourcePolicy, string> = {
 const navItems = [
   { href: "#ask", icon: Plus, label: "New run" },
   { href: "#memo", icon: NotebookText, label: "Current run" },
+  { href: "#acceptance", icon: ShieldCheck, label: "Gate" },
   { href: "#lineage", icon: GitBranch, label: "Lineage" },
   { href: "#artifacts", icon: Boxes, label: "Artifacts" },
   { href: "#trace", icon: SquareActivity, label: "Trace" },
@@ -182,6 +185,7 @@ export function App() {
   const [comparison, setComparison] = useState<RunComparison | null>(null);
   const [lineage, setLineage] = useState<DecisionLineage | null>(null);
   const [decisionRecord, setDecisionRecord] = useState<DecisionRecordDossier | null>(null);
+  const [acceptanceGate, setAcceptanceGate] = useState<DecisionAcceptanceGate | null>(null);
   const [jobs, setJobs] = useState<RunJob[]>([]);
   const [activeJob, setActiveJob] = useState<RunJob | null>(null);
   const [activeTab, setActiveTab] = useState<ArtifactTab>("Brief");
@@ -190,9 +194,11 @@ export function App() {
   const [isLoadingBundle, setIsLoadingBundle] = useState(false);
   const [isLoadingLineage, setIsLoadingLineage] = useState(false);
   const [isLoadingDecisionRecord, setIsLoadingDecisionRecord] = useState(false);
+  const [isLoadingAcceptanceGate, setIsLoadingAcceptanceGate] = useState(false);
   const [isExportingDelta, setIsExportingDelta] = useState(false);
   const lineageRequestId = useRef(0);
   const decisionRecordRequestId = useRef(0);
+  const acceptanceGateRequestId = useRef(0);
 
   const selectedRun = bundle ?? run;
   const activeProvider = providers[0];
@@ -289,6 +295,7 @@ export function App() {
   useEffect(() => {
     void refreshLineage(selectedProjectId);
     void refreshDecisionRecord(selectedProjectId);
+    void refreshAcceptanceGate(selectedProjectId);
   }, [selectedProjectId]);
 
   useEffect(() => {
@@ -296,11 +303,14 @@ export function App() {
       return;
     }
 
-    if (decisionRecord && (lineage?.summary.runCount ?? 0) > 0) {
+    if (acceptanceGate && decisionRecord && (lineage?.summary.runCount ?? 0) > 0) {
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
+      if (!acceptanceGate && !isLoadingAcceptanceGate) {
+        void refreshAcceptanceGate(selectedProjectId);
+      }
       if (!decisionRecord && !isLoadingDecisionRecord) {
         void refreshDecisionRecord(selectedProjectId);
       }
@@ -311,6 +321,8 @@ export function App() {
 
     return () => window.clearTimeout(timeoutId);
   }, [
+    acceptanceGate,
+    isLoadingAcceptanceGate,
     decisionRecord,
     isLoadingDecisionRecord,
     isLoadingLineage,
@@ -446,10 +458,38 @@ export function App() {
     }
   }
 
+  async function refreshAcceptanceGate(projectId: string) {
+    const requestId = acceptanceGateRequestId.current + 1;
+    acceptanceGateRequestId.current = requestId;
+
+    if (!projectId) {
+      setAcceptanceGate(null);
+      setIsLoadingAcceptanceGate(false);
+      return;
+    }
+
+    setIsLoadingAcceptanceGate(true);
+    try {
+      const nextAcceptanceGate = await getProjectAcceptanceGate(projectId);
+      if (acceptanceGateRequestId.current === requestId) {
+        setAcceptanceGate(nextAcceptanceGate);
+      }
+    } catch {
+      if (acceptanceGateRequestId.current === requestId) {
+        setAcceptanceGate(null);
+      }
+    } finally {
+      if (acceptanceGateRequestId.current === requestId) {
+        setIsLoadingAcceptanceGate(false);
+      }
+    }
+  }
+
   async function refreshProjectDecisionState(projectId: string) {
     await Promise.all([
       refreshLineage(projectId),
       refreshDecisionRecord(projectId),
+      refreshAcceptanceGate(projectId),
     ]);
   }
 
@@ -683,7 +723,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.14 · workspace
+              v0.15 · workspace
             </p>
           </div>
         </div>
@@ -692,7 +732,7 @@ export function App() {
           <p className="px-2 font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
             Workspace
           </p>
-          <div className="grid grid-cols-2 gap-1 sm:grid-cols-5 lg:grid-cols-1">
+          <div className="grid grid-cols-2 gap-1 sm:grid-cols-6 lg:grid-cols-1">
             {navItems.map((item) => (
               <Button
                 asChild
@@ -883,11 +923,13 @@ export function App() {
 
           <MemoPanel
             activeTab={activeTab}
+            acceptanceGate={acceptanceGate}
             bundle={bundle}
             comparison={comparison}
             decisionRecord={decisionRecord}
             evidenceTasks={evidenceTasks}
             isExportingDelta={isExportingDelta}
+            isLoadingAcceptanceGate={isLoadingAcceptanceGate}
             isLoadingBundle={isLoadingBundle}
             isLoadingDecisionRecord={isLoadingDecisionRecord}
             isLoadingLineage={isLoadingLineage}
@@ -1405,11 +1447,13 @@ function RunLifecyclePanel({
 
 function MemoPanel({
   activeTab,
+  acceptanceGate,
   bundle,
   comparison,
   decisionRecord,
   evidenceTasks,
   isExportingDelta,
+  isLoadingAcceptanceGate,
   isLoadingBundle,
   isLoadingDecisionRecord,
   isLoadingLineage,
@@ -1425,11 +1469,13 @@ function MemoPanel({
   onReviewClaim,
 }: {
   activeTab: ArtifactTab;
+  acceptanceGate: DecisionAcceptanceGate | null;
   bundle: RunBundle | null;
   comparison: RunComparison | null;
   decisionRecord: DecisionRecordDossier | null;
   evidenceTasks: StudioEvidenceTask[];
   isExportingDelta: boolean;
+  isLoadingAcceptanceGate: boolean;
   isLoadingBundle: boolean;
   isLoadingDecisionRecord: boolean;
   isLoadingLineage: boolean;
@@ -1493,6 +1539,10 @@ function MemoPanel({
               onChangeTab={onChangeTab}
               onResolveEvidenceTask={onResolveEvidenceTask}
               onReviewClaim={onReviewClaim}
+            />
+            <AcceptanceGatePanel
+              acceptanceGate={acceptanceGate}
+              isLoading={isLoadingAcceptanceGate}
             />
             <DecisionRecordPanel
               decisionRecord={decisionRecord}
@@ -2184,6 +2234,98 @@ function ReviewSummary({
   );
 }
 
+function AcceptanceGatePanel({
+  acceptanceGate,
+  isLoading,
+}: {
+  acceptanceGate: DecisionAcceptanceGate | null;
+  isLoading: boolean;
+}) {
+  const score = acceptanceGate ? `${Math.round(acceptanceGate.score * 100)}%` : "0%";
+
+  return (
+    <section
+      aria-label="Acceptance gate"
+      className="mt-4 grid gap-4 rounded-lg border bg-background p-4 text-sm"
+      id="acceptance"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+            <ShieldCheck className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+              Operational gate
+            </p>
+            <h3 className="mt-1 font-semibold">Acceptance gate</h3>
+            <p className="mt-1 text-muted-foreground">
+              Dossier checks for acting, sharing, or collecting more evidence.
+            </p>
+          </div>
+        </div>
+        {acceptanceGate ? (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <AcceptanceStatusBadge status={acceptanceGate.status} />
+            <Badge variant="outline">{score}</Badge>
+          </div>
+        ) : null}
+      </div>
+
+      {isLoading ? (
+        <div className="grid gap-2">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-24" />
+        </div>
+      ) : !acceptanceGate ? (
+        <p className="rounded-md border border-dashed bg-muted/35 p-3 text-muted-foreground">
+          Select a project with a decision record to evaluate acceptance.
+        </p>
+      ) : (
+        <>
+          <div className="grid gap-3 rounded-md border bg-muted/25 p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="font-semibold">{acceptanceGate.label}</h4>
+                <Badge variant="secondary">
+                  {acceptanceGate.summary.passCount}/{acceptanceGate.summary.totalCount} pass
+                </Badge>
+              </div>
+              <p className="mt-1 text-muted-foreground">
+                {acceptanceGate.recommendedAction}
+              </p>
+            </div>
+            <div className="grid min-w-28 gap-1 text-right">
+              <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+                Gate score
+              </p>
+              <p className="text-lg font-semibold">{score}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-2 2xl:grid-cols-2">
+            {acceptanceGate.checks.map((check) => (
+              <div className="grid gap-2 rounded-md border bg-muted/20 p-3" key={check.id}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <AcceptanceCheckIcon status={check.status} />
+                    <p className="font-semibold">{check.label}</p>
+                  </div>
+                  <Badge variant="outline">{check.status}</Badge>
+                </div>
+                <p className="text-muted-foreground">{check.detail}</p>
+                <p className="line-clamp-2 text-xs text-muted-foreground">
+                  Next: {check.nextAction}
+                </p>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 function DecisionRecordPanel({
   decisionRecord,
   isLoading,
@@ -2281,6 +2423,44 @@ function DecisionRecordPanel({
         </>
       )}
     </section>
+  );
+}
+
+function AcceptanceStatusBadge({ status }: { status: DecisionAcceptanceGate["status"] }) {
+  const statusClasses: Record<DecisionAcceptanceGate["status"], string> = {
+    accepted: "border-emerald-300 bg-emerald-100 text-emerald-900",
+    needs_review: "border-amber-300 bg-amber-100 text-amber-950",
+    blocked: "border-red-300 bg-red-100 text-red-900",
+  };
+
+  return (
+    <Badge className={cn("shrink-0", statusClasses[status])} variant="outline">
+      {formatStatusText(status)}
+    </Badge>
+  );
+}
+
+function AcceptanceCheckIcon({
+  status,
+}: {
+  status: DecisionAcceptanceGate["checks"][number]["status"];
+}) {
+  const icons = {
+    pass: Check,
+    warn: AlertTriangle,
+    fail: CircleX,
+  };
+  const statusClasses = {
+    pass: "bg-emerald-100 text-emerald-800",
+    warn: "bg-amber-100 text-amber-900",
+    fail: "bg-red-100 text-red-800",
+  };
+  const Icon = icons[status];
+
+  return (
+    <span className={cn("grid size-6 shrink-0 place-items-center rounded-md", statusClasses[status])}>
+      <Icon className="size-3.5" />
+    </span>
   );
 }
 

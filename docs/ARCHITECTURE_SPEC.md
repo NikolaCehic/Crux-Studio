@@ -140,6 +140,7 @@ POST   /api/runs/:runId/evidence-tasks/:taskId/resolve
 GET    /api/projects/:projectId/lineage
 GET    /api/projects/:projectId/decision-record
 GET    /api/projects/:projectId/export/decision-record-dossier
+GET    /api/projects/:projectId/acceptance-gate
 GET    /api/runs
 GET    /api/runs/:runId
 GET    /api/runs/:runId/artifacts/:artifact
@@ -160,6 +161,8 @@ POST   /api/runs/compare/export/decision-delta-package
 `GET /api/projects/:projectId/decision-record` returns a derived project dossier built from the latest run, stored review, source summary, key artifacts, project lineage, and latest decision delta.
 
 `GET /api/projects/:projectId/export/decision-record-dossier` returns a Markdown dossier with final recommendation, decision state, human review, lineage, key artifacts, and final memo.
+
+`GET /api/projects/:projectId/acceptance-gate` returns a derived actionability gate for the latest decision record with trust, readiness, source coverage, missing evidence, human review, lineage movement, blockers, export availability, weighted score, and recommended action.
 
 ## Run Bundle Shape For UI
 
@@ -194,11 +197,13 @@ v0.1:
 - projects, source packs, run links, review state, lifecycle job history, and evidence closure tasks are local durable state
 - queued lifecycle jobs recover after local server restart
 - interrupted running lifecycle jobs become failed and retryable after local server restart
+- local file-store reads and writes are serialized to prevent concurrent Studio actions from overwriting durable state
 - evidence closure task resolution creates a local source pack and starts a lifecycle rerun
 - run comparison creates a decision delta report for before and after evidence closure movement
 - comparison export creates a portable Markdown decision delta package
 - project lineage derives a readable decision timeline from durable local state
 - decision record dossiers combine the latest run, review state, lineage, source summary, key artifacts, and memo into one exportable record
+- acceptance gates derive actionability status from the latest decision record without storing a second approval source of truth
 - no hosted database yet
 
 v0.2:

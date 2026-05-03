@@ -23,15 +23,16 @@ Every phase must complete these steps before it is considered done:
 - Phase 15: Exportable Decision Delta Package, implemented in Studio v0.12.
 - Phase 16: Decision Lineage Timeline, implemented in Studio v0.13.
 - Phase 17: Decision Record Dossier, implemented in Studio v0.14.
+- Phase 18: Decision Record Acceptance Gate, implemented in Studio v0.15.
 
 ## Next Phase
 
-Phase 18: Decision Record Acceptance Gate.
+Phase 19: Acceptance Gate Remediation Planner.
 
 Goal:
 
-- Add an explicit acceptance checklist for whether a dossier is ready to act on, share, or needs more evidence.
+- Turn failed and warning acceptance checks into prioritized remediation tasks that a user can resolve through source updates, review actions, reruns, or export steps.
 
 Why this is next:
 
-- Studio can now assemble the final dossier. The next product gap is making readiness to act explicit with a gate that checks review state, source coverage, blockers, lineage movement, and export completeness.
+- Studio now exposes whether a dossier is accepted, needs review, or blocked. The next product gap is making each non-passing check directly actionable so the user can move the project toward acceptance without manually translating gate output into work.

@@ -404,6 +404,73 @@ const mockDossier = {
   },
 };
 
+const mockAcceptanceGate = {
+  projectId: "project-bakery",
+  projectName: "Bakery Operations",
+  latestRunId: "mock-replay",
+  status: "accepted",
+  label: "Ready to share",
+  score: 1,
+  recommendedAction: "Export dossier and share with the decision owner.",
+  summary: {
+    passCount: 8,
+    warnCount: 0,
+    failCount: 0,
+    requiredPassCount: 4,
+    totalCount: 8,
+  },
+  checks: [
+    {
+      id: "trust_gate",
+      label: "Trust gate",
+      status: "pass",
+      detail: "The latest run passed the trust gate.",
+      nextAction: "Keep trust evidence attached to the dossier.",
+      weight: 2,
+    },
+    {
+      id: "readiness",
+      label: "Readiness",
+      status: "pass",
+      detail: "The latest run is ready for review.",
+      nextAction: "Proceed with final review.",
+      weight: 1,
+    },
+    {
+      id: "source_coverage",
+      label: "Source coverage",
+      status: "pass",
+      detail: "The dossier includes source-backed evidence.",
+      nextAction: "Preserve the cited source pack.",
+      weight: 2,
+    },
+    {
+      id: "human_review",
+      label: "Human review",
+      status: "pass",
+      detail: "A reviewer approved claims and no claims are rejected.",
+      nextAction: "Keep reviewer rationale with the run.",
+      weight: 1,
+    },
+    {
+      id: "lineage_delta",
+      label: "Lineage movement",
+      status: "pass",
+      detail: "The latest decision delta improved.",
+      nextAction: "Reference the improved delta when sharing.",
+      weight: 1,
+    },
+    {
+      id: "export_package",
+      label: "Export package",
+      status: "pass",
+      detail: "The memo artifact is available for dossier export.",
+      nextAction: "Export the dossier package.",
+      weight: 1,
+    },
+  ],
+};
+
 describe("Crux Studio Ask workflow", () => {
   beforeEach(() => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
@@ -510,6 +577,13 @@ describe("Crux Studio Ask workflow", () => {
           });
         }
 
+        if (url.endsWith("/api/projects/project-bakery/acceptance-gate")) {
+          return new Response(JSON.stringify(mockAcceptanceGate), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
         if (url.endsWith("/api/projects/project-bakery/export/decision-record-dossier")) {
           return new Response(
             "# Crux Decision Record Dossier\n\n## Final Recommendation\n\nUse a staged approach.",
@@ -551,7 +625,7 @@ describe("Crux Studio Ask workflow", () => {
                 {
                   id: "mock",
                   status: "active",
-                  capabilities: ["ask", "inspect", "sources", "review", "compare", "agents", "lifecycle", "evidence-tasks", "lineage", "dossier"],
+                  capabilities: ["ask", "inspect", "sources", "review", "compare", "agents", "lifecycle", "evidence-tasks", "lineage", "dossier", "acceptance-gate"],
                 },
               ],
             }),
@@ -717,7 +791,7 @@ describe("Crux Studio Ask workflow", () => {
     expect(screen.getByText("Run lifecycle")).toBeInTheDocument();
     expect(screen.getByText(/server restart before completion/)).toBeInTheDocument();
     expect(screen.getAllByText("Retry run").length).toBeGreaterThan(0);
-    expect(await screen.findByText("Trust gate")).toBeInTheDocument();
+    expect((await screen.findAllByText("Trust gate")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Usable with warnings").length).toBeGreaterThan(0);
     expect(screen.getAllByText("warn").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Use a staged approach/).length).toBeGreaterThan(0);
@@ -745,6 +819,10 @@ describe("Crux Studio Ask workflow", () => {
     expect(screen.getByText("Answer first")).toBeInTheDocument();
     expect(screen.getAllByText(/Use a staged approach/).length).toBeGreaterThan(0);
     expect(await screen.findByRole("heading", { name: "Decision record" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Acceptance gate" })).toBeInTheDocument();
+    expect(screen.getByText("Ready to share")).toBeInTheDocument();
+    expect(screen.getByText("Export dossier and share with the decision owner.")).toBeInTheDocument();
+    expect(screen.getAllByText("Human review").length).toBeGreaterThan(0);
     expect(screen.getByText("Decision Record Dossier")).toBeInTheDocument();
     expect(screen.getByText("Final recommendation")).toBeInTheDocument();
     expect(screen.getByText(/Approved claims: claim-1/)).toBeInTheDocument();

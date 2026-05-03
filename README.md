@@ -69,6 +69,7 @@ Ask a question
 -> Compare runs
 -> Read the project lineage
 -> Assemble the decision record dossier
+-> Check the acceptance gate
 -> Export the dossier or decision package
 ```
 
@@ -97,15 +98,15 @@ Claims can be approved or rejected. Evidence can be annotated. The goal is to mo
 
 ### Improve And Compare
 
-Studio supports replaying a run with the same question and context, comparing the latest runs, reading the decision lineage, and assembling a dossier once the analysis is strong enough to share.
+Studio supports replaying a run with the same question and context, comparing the latest runs, reading the decision lineage, assembling a dossier, and checking whether the dossier is accepted, needs review, or is blocked.
 
 <p align="center">
   <img src="docs/assets/crux-studio-review-compare.png" alt="Crux Studio decision record dossier and lineage screenshot" />
 </p>
 
-### Export The Dossier
+### Accept And Export
 
-The decision record combines the final recommendation, readiness, trust, source coverage, human review, lineage movement, key artifacts, and memo into one Markdown package.
+The decision record combines the final recommendation, readiness, trust, source coverage, human review, lineage movement, key artifacts, and memo into one Markdown package. The acceptance gate scores the dossier before sharing so weak evidence, blockers, or missing review cannot hide in the final step.
 
 ## Current Capabilities
 
@@ -124,6 +125,7 @@ The decision record combines the final recommendation, readiness, trust, source 
 - Export the decision delta as a Markdown package with the newer memo and human review context.
 - See a project-level decision lineage that connects source packs, runs, evidence tasks, reruns, and decision deltas.
 - Read a project-level decision record dossier that combines the final recommendation, review state, source summary, lineage, latest delta, key artifacts, and next step.
+- Check a project-level acceptance gate that says whether the latest dossier is ready to share, needs review, or is blocked.
 - Export the decision record dossier as Markdown.
 - Start from canonical demo questions.
 - Inspect the memo, claims, evidence, sources, contradictions, uncertainty, bounded agents, council output, diagnostics, and trace.
@@ -263,7 +265,7 @@ Smoke check a running local Studio:
 pnpm smoke:local
 ```
 
-The smoke check creates source-backed lifecycle jobs, verifies durable lifecycle history, closes an evidence task with a source note, reruns Crux, compares the improved run, exports the delta package, validates the project lineage, and validates the decision record dossier export.
+The smoke check creates source-backed lifecycle jobs, verifies durable lifecycle history, closes an evidence task with a source note, reruns Crux, compares the improved run, exports the delta package, validates the project lineage, validates the decision record dossier export, and checks the acceptance gate.
 
 The project is developed with a TDD-first workflow. Product behavior is covered across the provider package, server API, and web app.
 
@@ -289,6 +291,7 @@ It is intentionally not a hosted team control plane yet. Authentication, teams, 
 - [Phase 15 exportable decision delta package spec](docs/PHASE_15_EXPORTABLE_DECISION_DELTA_PACKAGE_SPEC.md)
 - [Phase 16 decision lineage timeline spec](docs/PHASE_16_DECISION_LINEAGE_TIMELINE_SPEC.md)
 - [Phase 17 decision record dossier spec](docs/PHASE_17_DECISION_RECORD_DOSSIER_SPEC.md)
+- [Phase 18 decision record acceptance gate spec](docs/PHASE_18_DECISION_RECORD_ACCEPTANCE_GATE_SPEC.md)
 - [Demo guide](docs/DEMO_GUIDE.md)
 - [Trace log](docs/TRACE_LOG.md)
 - [Changelog](CHANGELOG.md)

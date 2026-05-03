@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.15.0 - 2026-05-03
+
+- Added a project-level decision record acceptance gate through `GET /api/projects/:projectId/acceptance-gate`.
+- Acceptance gates derive eight checks from the latest dossier: trust, readiness, source coverage, missing evidence, human review, lineage movement, blockers, and export package availability.
+- Added weighted gate scoring with `accepted`, `needs_review`, and `blocked` outcomes plus a recommended action.
+- Added a Studio `Acceptance gate` workbench section with score, pass totals, recommended action, and checklist details.
+- Added `acceptance-gate` to provider capability reporting.
+- Hardened local Studio file persistence with serialized reads and writes so concurrent UI preload and smoke workflow updates cannot clobber projects, source packs, jobs, or evidence tasks.
+- Expanded local smoke to validate acceptance status, required passing checks, score, and summary counts after a real evidence-closure workflow.
+- Added the Phase 18 decision record acceptance gate spec artifact.
+
 ## 0.14.0 - 2026-05-02
 
 - Added project-level decision records through `GET /api/projects/:projectId/decision-record`.

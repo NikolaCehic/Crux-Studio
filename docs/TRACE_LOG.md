@@ -1,5 +1,52 @@
 # Trace Log
 
+## 2026-05-03T10:51:00+02:00 - Phase 18 Decision Record Acceptance Gate
+
+Intent:
+
+- Implement the next productization phase under the required phase contract: full implementation, E2E/smoke tests, spec validation, artifacts, and next-phase handoff.
+- Make the latest decision record explicitly actionable with a derived acceptance gate that says whether the dossier is ready to share, needs review, or is blocked.
+
+Implemented:
+
+- Added `GET /api/projects/:projectId/acceptance-gate`.
+- Added `acceptance-gate` to provider capability reporting.
+- Added server-side acceptance checks for trust gate, readiness, source coverage, missing evidence, human review, lineage movement, blockers, and export package availability.
+- Added weighted gate scoring and recommended actions for `accepted`, `needs_review`, and `blocked` outcomes.
+- Added Studio API types and fetch helper for project acceptance gates.
+- Added a Studio `Acceptance gate` workbench section with gate label, score, pass totals, recommended action, and checklist details.
+- Added the Gate navigation item.
+- Refreshed project acceptance state after project selection and every project-changing action already used for lineage and dossiers.
+- Hardened local file-store reads and writes with serialized transactions after smoke exposed a concurrent persistence race between project, source-pack, job, and evidence-task writes.
+- Deferred evidence-closure job enqueueing until after the task stores its rerun job id, and added source-pack fallback matching for lineage rerun recovery.
+- Expanded local smoke to validate the acceptance gate after the real evidence-closure dossier export.
+- Added `docs/PHASE_18_DECISION_RECORD_ACCEPTANCE_GATE_SPEC.md`.
+- Updated README, changelog, architecture spec, productization plan, and phase execution protocol.
+
+Verification:
+
+- Failing server and web expectations were written first and passed after implementation.
+- Focused server workflow test passed: `pnpm --filter @crux-studio/server test -- product-workflow`.
+- Focused web workflow test passed: `pnpm --filter @crux-studio/web test -- App.test.tsx`.
+- Server persistence fix test and typecheck passed: `pnpm --filter @crux-studio/server test` and `pnpm --filter @crux-studio/server check`.
+- Full Studio verification passed after the persistence fix: `pnpm verify`.
+- Local smoke passed: `pnpm smoke:local`.
+- Final source-backed smoke job: `job-20260503084446-e526aeb3`.
+- Final source-backed smoke run: `20260503T084446Z-how-should-a-support-team-reduce-first-response-`.
+- Final evidence base run: `20260503T084446Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence task: `task-7b36a3fc-12-adversarial-scenario-remove-evidence`.
+- Final evidence closure rerun job: `job-20260503084447-bb3a8773`.
+- Final evidence closure rerun: `20260503T084447Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence closure result: task `resolved`, rerun source count `1`, delta direction `improved`, closed gap count `1`, remaining blocker count `0`, comparison differences `7`, delta package bytes `6439`, lineage event count `20`, lineage delta count `1`, dossier approved claims `1`, dossier source count `1`, dossier package bytes `5976`, acceptance status `needs_review`, acceptance score `0.91`, acceptance checks `6 pass`, `2 warn`, `0 fail`.
+- Refreshed README screenshots:
+  - `docs/assets/crux-studio-workbench.png`
+  - `docs/assets/crux-studio-review-compare.png`
+
+Result:
+
+- Phase 18 is done.
+- Next phase: Phase 19 Acceptance Gate Remediation Planner.
+
 ## 2026-05-02T23:49:09+02:00 - Phase 17 Decision Record Dossier
 
 Intent:

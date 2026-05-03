@@ -233,6 +233,7 @@ describe("Studio product workflow API", () => {
       ]),
     );
     expect(providers.json().providers[0].capabilities).toContain("agents");
+    expect(providers.json().providers[0].capabilities).toContain("acceptance-gate");
   });
 
   it("turns evidence gaps into source tasks that can be resolved, rerun, and compared", async () => {
@@ -522,6 +523,38 @@ describe("Studio product workflow API", () => {
     expect(dossierExportResponse.body).toContain("## Decision Lineage");
     expect(dossierExportResponse.body).toContain("Decision delta ready");
     expect(dossierExportResponse.body).toContain("## Final Memo");
+
+    const acceptanceResponse = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/acceptance-gate`,
+    });
+    expect(acceptanceResponse.statusCode).toBe(200);
+    const acceptanceGate = acceptanceResponse.json();
+    expect(acceptanceGate).toEqual(
+      expect.objectContaining({
+        projectId: project.id,
+        projectName: "Support Ops",
+        latestRunId: completedJob.run.runId,
+        status: "accepted",
+        label: "Ready to share",
+        score: 1,
+        recommendedAction: "Export dossier and share with the decision owner.",
+        summary: expect.objectContaining({
+          failCount: 0,
+          warnCount: 0,
+        }),
+      }),
+    );
+    expect(acceptanceGate.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "trust_gate", status: "pass" }),
+        expect.objectContaining({ id: "readiness", status: "pass" }),
+        expect.objectContaining({ id: "source_coverage", status: "pass" }),
+        expect.objectContaining({ id: "human_review", label: "Human review", status: "pass" }),
+        expect.objectContaining({ id: "lineage_delta", status: "pass" }),
+        expect.objectContaining({ id: "export_package", status: "pass" }),
+      ]),
+    );
   });
 });
 

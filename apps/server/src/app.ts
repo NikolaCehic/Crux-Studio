@@ -266,7 +266,11 @@ export function buildServer({
     }
   }
 
-  async function createRunJob(input: StudioAskInput, retryOf?: string): Promise<RunJob> {
+  async function createRunJob(
+    input: StudioAskInput,
+    retryOf?: string,
+    options: { enqueue?: boolean } = {},
+  ): Promise<RunJob> {
     await ensureRecoveredJobs();
 
     const createdAt = now();
@@ -282,7 +286,9 @@ export function buildServer({
 
     runJobs.set(job.jobId, job);
     await store.saveRunJob(job);
-    enqueueRunJob(job.jobId);
+    if (options.enqueue !== false) {
+      enqueueRunJob(job.jobId);
+    }
     return job;
   }
 
@@ -386,6 +392,7 @@ export function buildServer({
           "export",
           "lineage",
           "dossier",
+          "acceptance-gate",
         ],
       },
     ],
@@ -531,6 +538,22 @@ export function buildServer({
     },
   );
 
+  app.get<{ Params: { projectId: string } }>(
+    "/api/projects/:projectId/acceptance-gate",
+    async (request, reply) => {
+      try {
+        const dossier = await buildProjectDecisionRecordDossier(request.params.projectId);
+        if (!dossier) {
+          return reply.code(404).send({ message: "Acceptance gate requires a project run." });
+        }
+
+        return buildDecisionAcceptanceGate(dossier);
+      } catch {
+        return reply.code(404).send({ message: "Acceptance gate failed to load." });
+      }
+    },
+  );
+
   app.post("/api/source-packs", async (request, reply) => {
     const parsed = sourcePackSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -619,19 +642,24 @@ export function buildServer({
           resolvedBySourcePackId: sourcePack.id,
           resolutionNote: parsed.data.note?.trim() || undefined,
         });
-        const job = await createRunJob({
-          projectId,
-          sourcePackId: sourcePack.id,
-          question: bundle.question,
-          context: evidenceClosureContext(bundle, task, parsed.data.note),
-          timeHorizon: "same as source run",
-          sourcePolicy: "hybrid",
-        });
+        const job = await createRunJob(
+          {
+            projectId,
+            sourcePackId: sourcePack.id,
+            question: bundle.question,
+            context: evidenceClosureContext(bundle, task, parsed.data.note),
+            timeHorizon: "same as source run",
+            sourcePolicy: "hybrid",
+          },
+          undefined,
+          { enqueue: false },
+        );
         resolvedTask = await store.saveEvidenceTask({
           ...resolvedTask,
           updatedAt: now(),
           rerunJobId: job.jobId,
         });
+        enqueueRunJob(job.jobId);
 
         return reply.code(201).send({ task: resolvedTask, sourcePack, job });
       } catch {
@@ -1037,6 +1065,43 @@ type DecisionRecordDossier = {
   memo: string;
 };
 
+type DecisionAcceptanceCheckStatus = "pass" | "warn" | "fail";
+
+type DecisionAcceptanceCheck = {
+  id:
+    | "trust_gate"
+    | "readiness"
+    | "source_coverage"
+    | "missing_evidence"
+    | "human_review"
+    | "lineage_delta"
+    | "blockers"
+    | "export_package";
+  label: string;
+  status: DecisionAcceptanceCheckStatus;
+  detail: string;
+  nextAction: string;
+  weight: number;
+};
+
+type DecisionAcceptanceGate = {
+  projectId: string;
+  projectName: string;
+  latestRunId: string;
+  status: "accepted" | "needs_review" | "blocked";
+  label: string;
+  score: number;
+  recommendedAction: string;
+  checks: DecisionAcceptanceCheck[];
+  summary: {
+    passCount: number;
+    warnCount: number;
+    failCount: number;
+    requiredPassCount: number;
+    totalCount: number;
+  };
+};
+
 function enrichRun<T extends { runId: string }>(
   run: T,
   link: { projectId?: string; sourcePackId?: string } | undefined,
@@ -1087,6 +1152,11 @@ function buildDecisionLineage({
     evidenceTasks
       .filter((task) => task.rerunJobId)
       .map((task) => [task.rerunJobId as string, task]),
+  );
+  const taskByResolvedSourcePackId = new Map(
+    evidenceTasks
+      .filter((task) => task.resolvedBySourcePackId)
+      .map((task) => [task.resolvedBySourcePackId as string, task]),
   );
   const events: DecisionLineageEvent[] = [];
 
@@ -1148,7 +1218,9 @@ function buildDecisionLineage({
   }
 
   for (const job of jobs) {
-    const task = taskByRerunJobId.get(job.jobId);
+    const task =
+      taskByRerunJobId.get(job.jobId) ??
+      (job.input.sourcePackId ? taskByResolvedSourcePackId.get(job.input.sourcePackId) : undefined);
     if (!task || job.status !== "succeeded" || !job.run) {
       continue;
     }
@@ -1284,6 +1356,199 @@ function buildDecisionRecordDossier({
       report: latestRun.paths.htmlReport,
     },
     memo: latestRun.memo,
+  };
+}
+
+function buildDecisionAcceptanceGate(dossier: DecisionRecordDossier): DecisionAcceptanceGate {
+  const latestDelta = dossier.lineage.latestDelta;
+  const approvedClaimCount = dossier.review.approvedClaims.length;
+  const rejectedClaimCount = dossier.review.rejectedClaims.length;
+  const missingEvidenceCount = dossier.sourceSummary.missingEvidence.length;
+  const blockerCount = dossier.trust.blockingIssues.length + dossier.readiness.blockerCount;
+  const requiredCheckIds = new Set<DecisionAcceptanceCheck["id"]>([
+    "trust_gate",
+    "source_coverage",
+    "blockers",
+    "export_package",
+  ]);
+
+  const checks: DecisionAcceptanceCheck[] = [
+    {
+      id: "trust_gate",
+      label: "Trust gate",
+      status: dossier.trust.status === "pass" ? "pass" : dossier.trust.status === "fail" ? "fail" : "warn",
+      detail:
+        dossier.trust.status === "pass"
+          ? `The latest run passed with ${formatPercent(dossier.trust.confidence)} confidence.`
+          : `The latest run is ${dossier.trust.status} with ${formatPercent(dossier.trust.confidence)} confidence.`,
+      nextAction:
+        dossier.trust.status === "pass"
+          ? "Keep trust evidence attached to the dossier."
+          : dossier.trust.blockingIssues[0] ?? "Resolve the trust gate warnings before sharing.",
+      weight: 2,
+    },
+    {
+      id: "readiness",
+      label: "Readiness",
+      status:
+        dossier.readiness.status === "ready"
+          ? "pass"
+          : dossier.readiness.status === "blocked"
+            ? "fail"
+            : "warn",
+      detail: dossier.readiness.reason,
+      nextAction: dossier.readiness.nextAction ?? "Move the latest run to ready before final sharing.",
+      weight: 1,
+    },
+    {
+      id: "source_coverage",
+      label: "Source coverage",
+      status: dossier.sourceSummary.sourceCount > 0 ? "pass" : "fail",
+      detail:
+        dossier.sourceSummary.sourceCount > 0
+          ? `${dossier.sourceSummary.sourceCount} ${plural("source", dossier.sourceSummary.sourceCount)} and ${dossier.sourceSummary.sourceChunkCount} ${plural("chunk", dossier.sourceSummary.sourceChunkCount)} are attached.`
+          : "The dossier has no attached source inventory.",
+      nextAction:
+        dossier.sourceSummary.sourceCount > 0
+          ? "Preserve the source pack with the decision record."
+          : "Attach source material and rerun the analysis.",
+      weight: 2,
+    },
+    {
+      id: "missing_evidence",
+      label: "Missing evidence",
+      status: missingEvidenceCount === 0 ? "pass" : "warn",
+      detail:
+        missingEvidenceCount === 0
+          ? "No missing evidence gaps remain on the latest run."
+          : `${missingEvidenceCount} ${plural("evidence gap", missingEvidenceCount)} still need attention.`,
+      nextAction:
+        missingEvidenceCount === 0
+          ? "Keep the evidence closure notes in the dossier."
+          : dossier.sourceSummary.missingEvidence[0] ?? "Close the remaining evidence gaps.",
+      weight: 1,
+    },
+    {
+      id: "human_review",
+      label: "Human review",
+      status: rejectedClaimCount > 0 ? "fail" : approvedClaimCount > 0 ? "pass" : "warn",
+      detail:
+        rejectedClaimCount > 0
+          ? `${rejectedClaimCount} ${plural("claim", rejectedClaimCount)} rejected in review.`
+          : approvedClaimCount > 0
+            ? `${approvedClaimCount} ${plural("claim", approvedClaimCount)} approved and no claims rejected.`
+            : "No human claim approval is recorded yet.",
+      nextAction:
+        rejectedClaimCount > 0
+          ? "Resolve rejected claims before accepting the dossier."
+          : approvedClaimCount > 0
+            ? "Keep reviewer rationale with the run."
+            : "Approve or reject key claims before sharing.",
+      weight: 1,
+    },
+    {
+      id: "lineage_delta",
+      label: "Lineage movement",
+      status:
+        latestDelta?.direction === "improved"
+          ? "pass"
+          : latestDelta?.direction === "regressed"
+            ? "fail"
+            : "warn",
+      detail: latestDelta
+        ? `${latestDelta.title}: ${latestDelta.detail}`
+        : "No decision delta is available for the latest project run.",
+      nextAction: latestDelta
+        ? latestDelta.nextStep
+        : "Compare a source-backed rerun against the prior decision state.",
+      weight: 1,
+    },
+    {
+      id: "blockers",
+      label: "Blockers",
+      status: blockerCount === 0 && (latestDelta?.remainingBlockerCount ?? 0) === 0 ? "pass" : "fail",
+      detail:
+        blockerCount === 0 && (latestDelta?.remainingBlockerCount ?? 0) === 0
+          ? "No trust, readiness, or lineage blockers remain."
+          : `${blockerCount + (latestDelta?.remainingBlockerCount ?? 0)} ${plural("blocker", blockerCount + (latestDelta?.remainingBlockerCount ?? 0))} remain.`,
+      nextAction:
+        dossier.trust.blockingIssues[0] ??
+        (latestDelta?.remainingBlockerCount ? latestDelta.nextStep : undefined) ??
+        dossier.readiness.nextAction ??
+        "Resolve blockers before sharing.",
+      weight: 2,
+    },
+    {
+      id: "export_package",
+      label: "Export package",
+      status: dossier.keyArtifacts.memo ? "pass" : "fail",
+      detail: dossier.keyArtifacts.memo
+        ? "The memo artifact is available for dossier export."
+        : "The latest run does not expose a memo artifact.",
+      nextAction: dossier.keyArtifacts.memo
+        ? "Export the dossier package."
+        : "Regenerate the run so the memo artifact is available.",
+      weight: 1,
+    },
+  ];
+
+  const passCount = checks.filter((check) => check.status === "pass").length;
+  const warnCount = checks.filter((check) => check.status === "warn").length;
+  const failCount = checks.filter((check) => check.status === "fail").length;
+  const requiredPassCount = checks.filter(
+    (check) => requiredCheckIds.has(check.id) && check.status === "pass",
+  ).length;
+  const totalWeight = checks.reduce((sum, check) => sum + check.weight, 0);
+  const earnedWeight = checks.reduce((sum, check) => {
+    if (check.status === "pass") {
+      return sum + check.weight;
+    }
+
+    if (check.status === "warn") {
+      return sum + check.weight * 0.5;
+    }
+
+    return sum;
+  }, 0);
+  const score = Number((earnedWeight / totalWeight).toFixed(2));
+  const requiredFailure = checks.some(
+    (check) => requiredCheckIds.has(check.id) && check.status === "fail",
+  );
+  const status =
+    failCount > 0 || requiredFailure
+      ? "blocked"
+      : warnCount > 0
+        ? "needs_review"
+        : "accepted";
+  const firstFail = checks.find((check) => check.status === "fail");
+  const firstWarn = checks.find((check) => check.status === "warn");
+
+  return {
+    projectId: dossier.projectId,
+    projectName: dossier.projectName,
+    latestRunId: dossier.latestRunId,
+    status,
+    label:
+      status === "accepted"
+        ? "Ready to share"
+        : status === "blocked"
+          ? "Blocked"
+          : "Needs review",
+    score,
+    recommendedAction:
+      status === "accepted"
+        ? "Export dossier and share with the decision owner."
+        : status === "blocked"
+          ? firstFail?.nextAction ?? "Resolve blocking checks before sharing."
+          : firstWarn?.nextAction ?? "Review warning checks before sharing.",
+    checks,
+    summary: {
+      passCount,
+      warnCount,
+      failCount,
+      requiredPassCount,
+      totalCount: checks.length,
+    },
   };
 }
 
@@ -1862,6 +2127,10 @@ function difference(left: string[], right: string[]) {
 
 function plural(noun: string, count: number) {
   return count === 1 ? noun : `${noun}s`;
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(value * 100)}%`;
 }
 
 function joinSentence(items: string[]) {

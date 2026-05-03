@@ -180,6 +180,39 @@ export type DecisionRecordDossier = {
   memo?: string;
 };
 
+export type DecisionAcceptanceGate = {
+  projectId: string;
+  projectName: string;
+  latestRunId: string;
+  status: "accepted" | "needs_review" | "blocked";
+  label: string;
+  score: number;
+  recommendedAction: string;
+  checks: Array<{
+    id:
+      | "trust_gate"
+      | "readiness"
+      | "source_coverage"
+      | "missing_evidence"
+      | "human_review"
+      | "lineage_delta"
+      | "blockers"
+      | "export_package";
+    label: string;
+    status: "pass" | "warn" | "fail";
+    detail: string;
+    nextAction: string;
+    weight: number;
+  }>;
+  summary: {
+    passCount: number;
+    warnCount: number;
+    failCount: number;
+    requiredPassCount: number;
+    totalCount: number;
+  };
+};
+
 export type ProviderRegistry = {
   providers: Array<{
     id: string;
@@ -262,6 +295,13 @@ export async function getProjectDecisionRecord(projectId: string): Promise<Decis
   return getJson(
     `/api/projects/${encodeURIComponent(projectId)}/decision-record`,
     "Decision record failed to load.",
+  );
+}
+
+export async function getProjectAcceptanceGate(projectId: string): Promise<DecisionAcceptanceGate> {
+  return getJson(
+    `/api/projects/${encodeURIComponent(projectId)}/acceptance-gate`,
+    "Acceptance gate failed to load.",
   );
 }
 

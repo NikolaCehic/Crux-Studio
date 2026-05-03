@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { AskInput, RunSummary } from "@crux-studio/crux-provider";
 
 export type StudioProject = {
@@ -378,6 +379,9 @@ class MemoryStudioStore implements StudioStore {
 }
 
 class FileStudioStore extends MemoryStudioStore {
+  private readonly transaction = new AsyncLocalStorage<boolean>();
+  private writeChain: Promise<unknown> = Promise.resolve();
+
   constructor(
     private readonly rootDir: string,
     now: () => string,
@@ -398,74 +402,81 @@ class FileStudioStore extends MemoryStudioStore {
     }
   }
 
+  private async readState<T>(operation: () => Promise<T>): Promise<T> {
+    if (!this.transaction.getStore()) {
+      await this.writeChain;
+      await this.load();
+    }
+
+    return operation();
+  }
+
+  private async writeState<T>(operation: () => Promise<T>): Promise<T> {
+    const previousWrite = this.writeChain;
+    const nextWrite = previousWrite.then(() =>
+      this.transaction.run(true, async () => {
+        await this.load();
+        return operation();
+      }),
+    );
+    this.writeChain = nextWrite.catch(() => undefined);
+    return nextWrite;
+  }
+
   override async createProject(name: string): Promise<StudioProject> {
-    await this.load();
-    return super.createProject(name);
+    return this.writeState(() => super.createProject(name));
   }
 
   override async listProjects(): Promise<StudioProject[]> {
-    await this.load();
-    return super.listProjects();
+    return this.readState(() => super.listProjects());
   }
 
   override async linkRun(input: StudioRunLink): Promise<StudioRunLink> {
-    await this.load();
-    return super.linkRun(input);
+    return this.writeState(() => super.linkRun(input));
   }
 
   override async listProjectRuns(projectId: string, runs: RunSummary[]): Promise<RunSummary[]> {
-    await this.load();
-    return super.listProjectRuns(projectId, runs);
+    return this.readState(() => super.listProjectRuns(projectId, runs));
   }
 
   override async getRunLink(runId: string): Promise<StudioRunLink | undefined> {
-    await this.load();
-    return super.getRunLink(runId);
+    return this.readState(() => super.getRunLink(runId));
   }
 
   override async saveRunJob(job: StudioRunJob): Promise<StudioRunJob> {
-    await this.load();
-    return super.saveRunJob(job);
+    return this.writeState(() => super.saveRunJob(job));
   }
 
   override async listRunJobs(): Promise<StudioRunJob[]> {
-    await this.load();
-    return super.listRunJobs();
+    return this.readState(() => super.listRunJobs());
   }
 
   override async getRunJob(jobId: string): Promise<StudioRunJob | undefined> {
-    await this.load();
-    return super.getRunJob(jobId);
+    return this.readState(() => super.getRunJob(jobId));
   }
 
   override async saveEvidenceTask(task: StudioEvidenceTask): Promise<StudioEvidenceTask> {
-    await this.load();
-    return super.saveEvidenceTask(task);
+    return this.writeState(() => super.saveEvidenceTask(task));
   }
 
   override async listEvidenceTasks(runId: string): Promise<StudioEvidenceTask[]> {
-    await this.load();
-    return super.listEvidenceTasks(runId);
+    return this.readState(() => super.listEvidenceTasks(runId));
   }
 
   override async getEvidenceTask(taskId: string): Promise<StudioEvidenceTask | undefined> {
-    await this.load();
-    return super.getEvidenceTask(taskId);
+    return this.readState(() => super.getEvidenceTask(taskId));
   }
 
   override async createSourcePack(input: CreateSourcePackInput): Promise<StudioSourcePack> {
-    await this.load();
-    return super.createSourcePack(input);
+    return this.writeState(() => super.createSourcePack(input));
   }
 
   override async listSourcePacks(projectId?: string): Promise<StudioSourcePack[]> {
-    await this.load();
-    return super.listSourcePacks(projectId);
+    return this.readState(() => super.listSourcePacks(projectId));
   }
 
   override async getSourcePack(sourcePackId: string): Promise<StudioSourcePack | undefined> {
-    await this.load();
-    return super.getSourcePack(sourcePackId);
+    return this.readState(() => super.getSourcePack(sourcePackId));
   }
 
   override async addClaimReview(input: {
@@ -475,8 +486,7 @@ class FileStudioStore extends MemoryStudioStore {
     reviewer: string;
     rationale: string;
   }): Promise<StudioReview> {
-    await this.load();
-    return super.addClaimReview(input);
+    return this.writeState(() => super.addClaimReview(input));
   }
 
   override async addEvidenceAnnotation(input: {
@@ -485,13 +495,11 @@ class FileStudioStore extends MemoryStudioStore {
     reviewer: string;
     note: string;
   }): Promise<StudioReview> {
-    await this.load();
-    return super.addEvidenceAnnotation(input);
+    return this.writeState(() => super.addEvidenceAnnotation(input));
   }
 
   override async getReview(runId: string): Promise<StudioReview> {
-    await this.load();
-    return super.getReview(runId);
+    return this.readState(() => super.getReview(runId));
   }
 
   private statePath() {

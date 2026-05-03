@@ -252,6 +252,27 @@ async function main() {
       throw new Error(`Decision record dossier package is missing expected text: ${expectedText}`);
     }
   }
+  const acceptanceGate = await getJson(`${serverUrl}/api/projects/${project.id}/acceptance-gate`);
+  if (!["accepted", "needs_review"].includes(acceptanceGate.status)) {
+    throw new Error(`Acceptance gate should not be blocked after evidence closure: ${JSON.stringify(acceptanceGate)}`);
+  }
+  if (!Array.isArray(acceptanceGate.checks) || acceptanceGate.checks.length < 8) {
+    throw new Error(`Acceptance gate returned an incomplete checklist: ${JSON.stringify(acceptanceGate.checks)}`);
+  }
+  const acceptanceChecks = new Map(acceptanceGate.checks.map((check) => [check.id, check]));
+  for (const requiredPassCheck of [
+    "trust_gate",
+    "source_coverage",
+    "human_review",
+    "lineage_delta",
+    "blockers",
+    "export_package",
+  ]) {
+    const check = acceptanceChecks.get(requiredPassCheck);
+    if (check?.status !== "pass") {
+      throw new Error(`Acceptance gate check ${requiredPassCheck} did not pass: ${JSON.stringify(check)}`);
+    }
+  }
 
   console.log(JSON.stringify({
     ok: health.ok === true,
@@ -297,6 +318,11 @@ async function main() {
       dossierLatestRunId: dossier.latestRunId,
       dossierSourceCount: dossier.sourceSummary.sourceCount,
       dossierPackageBytes: dossierPackage.length,
+      acceptanceStatus: acceptanceGate.status,
+      acceptanceScore: acceptanceGate.score,
+      acceptancePassCount: acceptanceGate.summary.passCount,
+      acceptanceWarnCount: acceptanceGate.summary.warnCount,
+      acceptanceFailCount: acceptanceGate.summary.failCount,
     },
   }, null, 2));
 }
