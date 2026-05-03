@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.17.0 - 2026-05-03
+
+- Added guided remediation execution for project-level remediation actions.
+- Remediation CTAs now route into the matching Studio workflow instead of acting as passive links.
+- Source and evidence remediation actions prefill source-pack intake with action-specific evidence context.
+- Claim-review actions select the Claims tab, rerun actions replay the active run, and comparison actions run the existing latest-run comparison flow.
+- Added an inline `Guided remediation` panel that preserves active action context, priority, action type, start time, and gate-watch status.
+- The guide now reports when a refreshed remediation plan changes after the action starts.
+- Added focused web workflow tests for evidence guidance, gate movement, claim review routing, replay, and comparison.
+- Added the Phase 20 guided remediation execution spec artifact.
+
 ## 0.16.0 - 2026-05-03
 
 - Added a project-level remediation planner through `GET /api/projects/:projectId/remediation-plan`.

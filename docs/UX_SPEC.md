@@ -161,6 +161,19 @@ Capabilities:
 - show prompt/source/stage/artifact-contract differences
 - show trust-score movement
 
+### 9. Acceptance And Remediation
+
+Purpose: move a decision record from draft or review state toward accountable handoff.
+
+Capabilities:
+
+- show a project acceptance gate
+- explain which gate checks pass, warn, or fail
+- turn non-passing checks into prioritized remediation actions
+- launch guided source intake, claim review, replay, comparison, diagnostics, or export from each action
+- preserve active action context while the user works
+- show whether a refreshed gate changed after the action began
+
 ## Design Direction
 
 Physical scene:
@@ -225,4 +238,3 @@ Source workspace empty state:
 - User can open claims, evidence, diagnostics, and trace.
 - User can rerun with changed question/context/time horizon/source policy.
 - User can open the generated HTML report or export the memo.
-

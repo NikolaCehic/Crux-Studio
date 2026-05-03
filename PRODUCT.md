@@ -27,6 +27,7 @@ The run is the product unit. Studio should not behave like a generic chatbot bec
 5. Add sources or context when the trust gate fails.
 6. Review, annotate, and export the final memo.
 7. Compare a newer run to an older run.
+8. Follow guided remediation actions until the decision record is ready to share.
 
 ## Product Principles
 
@@ -36,6 +37,7 @@ The run is the product unit. Studio should not behave like a generic chatbot bec
 - Review and rerun are first-class actions.
 - Source gaps are product information, not error noise.
 - Studio should help the user improve the analysis, not merely display it.
+- Remediation should launch the right workflow, not just describe the next task.
 
 ## Non-Goals
 
@@ -44,4 +46,3 @@ The run is the product unit. Studio should not behave like a generic chatbot bec
 - Do not copy Crux Harness logic into the UI.
 - Do not make source-free answers appear fully trusted.
 - Do not start with multi-tenant SaaS complexity before the single-user run workflow is excellent.
-

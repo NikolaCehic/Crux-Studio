@@ -167,6 +167,8 @@ POST   /api/runs/compare/export/decision-delta-package
 
 `GET /api/projects/:projectId/remediation-plan` returns a derived prioritized action plan for every non-passing acceptance check, including source attachment, evidence closure, review, rerun comparison, blocker resolution, regeneration, and dossier export actions.
 
+Guided remediation execution is client-side orchestration over existing APIs. Studio stores the active guide in UI state, routes the user into source intake, claim review, replay, comparison, diagnostics, or export flows, then compares the latest remediation plan signature against the starting signature to show gate movement.
+
 ## Run Bundle Shape For UI
 
 The UI should request a normalized run bundle:
@@ -208,6 +210,7 @@ v0.1:
 - decision record dossiers combine the latest run, review state, lineage, source summary, key artifacts, and memo into one exportable record
 - acceptance gates derive actionability status from the latest decision record without storing a second approval source of truth
 - remediation plans derive prioritized next actions from the acceptance gate without storing duplicate task state
+- guided remediation execution routes plan actions through existing workflows and watches refreshed gate movement in client state
 - no hosted database yet
 
 v0.2:

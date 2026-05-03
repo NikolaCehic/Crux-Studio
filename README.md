@@ -71,6 +71,7 @@ Ask a question
 -> Assemble the decision record dossier
 -> Check the acceptance gate
 -> Follow the remediation plan
+-> Let guided remediation open the right workflow
 -> Export the dossier or decision package
 ```
 
@@ -99,15 +100,15 @@ Claims can be approved or rejected. Evidence can be annotated. The goal is to mo
 
 ### Improve And Compare
 
-Studio supports replaying a run with the same question and context, comparing the latest runs, reading the decision lineage, assembling a dossier, checking whether the dossier is accepted, needs review, or is blocked, and following a remediation plan for whatever still needs work.
+Studio supports replaying a run with the same question and context, comparing the latest runs, reading the decision lineage, assembling a dossier, checking whether the dossier is accepted, needs review, or is blocked, and following a guided remediation plan for whatever still needs work.
 
 <p align="center">
-  <img src="docs/assets/crux-studio-review-compare.png" alt="Crux Studio acceptance gate and remediation plan screenshot" />
+  <img src="docs/assets/crux-studio-review-compare.png" alt="Crux Studio guided remediation plan screenshot" />
 </p>
 
 ### Accept And Export
 
-The decision record combines the final recommendation, readiness, trust, source coverage, human review, lineage movement, key artifacts, and memo into one Markdown package. The acceptance gate scores the dossier before sharing, and the remediation plan turns weak evidence, blockers, missing review, and export readiness into prioritized next actions.
+The decision record combines the final recommendation, readiness, trust, source coverage, human review, lineage movement, key artifacts, and memo into one Markdown package. The acceptance gate scores the dossier before sharing, and guided remediation turns weak evidence, blockers, missing review, rerun comparison, and export readiness into executable next actions.
 
 ## Current Capabilities
 
@@ -128,6 +129,7 @@ The decision record combines the final recommendation, readiness, trust, source 
 - Read a project-level decision record dossier that combines the final recommendation, review state, source summary, lineage, latest delta, key artifacts, and next step.
 - Check a project-level acceptance gate that says whether the latest dossier is ready to share, needs review, or is blocked.
 - Follow a project-level remediation plan that turns non-passing gate checks into prioritized source, evidence, review, rerun, blocker, regeneration, and export actions.
+- Start guided remediation from those actions: source gaps prefill source intake, review actions open claims, rerun actions replay the run, and comparison actions run the delta path.
 - Export the decision record dossier as Markdown.
 - Start from canonical demo questions.
 - Inspect the memo, claims, evidence, sources, contradictions, uncertainty, bounded agents, council output, diagnostics, and trace.
@@ -295,6 +297,7 @@ It is intentionally not a hosted team control plane yet. Authentication, teams, 
 - [Phase 17 decision record dossier spec](docs/PHASE_17_DECISION_RECORD_DOSSIER_SPEC.md)
 - [Phase 18 decision record acceptance gate spec](docs/PHASE_18_DECISION_RECORD_ACCEPTANCE_GATE_SPEC.md)
 - [Phase 19 acceptance gate remediation planner spec](docs/PHASE_19_ACCEPTANCE_GATE_REMEDIATION_PLANNER_SPEC.md)
+- [Phase 20 guided remediation execution spec](docs/PHASE_20_GUIDED_REMEDIATION_EXECUTION_SPEC.md)
 - [Demo guide](docs/DEMO_GUIDE.md)
 - [Trace log](docs/TRACE_LOG.md)
 - [Changelog](CHANGELOG.md)

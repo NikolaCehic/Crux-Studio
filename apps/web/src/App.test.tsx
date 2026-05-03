@@ -499,8 +499,70 @@ const mockRemediationPlan = {
   ],
 };
 
+const mockActionRequiredRemediationPlan = {
+  projectId: "project-bakery",
+  projectName: "Bakery Operations",
+  latestRunId: "mock-ask",
+  status: "action_required",
+  recommendedAction: "Current response-time baseline",
+  summary: {
+    totalActions: 3,
+    blockingActions: 0,
+    warningActions: 3,
+    readyActions: 0,
+  },
+  actions: [
+    {
+      id: "missing-evidence-remediation",
+      gateCheckId: "missing_evidence",
+      label: "Close missing evidence",
+      status: "warn",
+      priority: "high",
+      actionType: "close_evidence_gap",
+      rationale: "1 evidence gap still needs attention.",
+      recommendedAction: "Current response-time baseline",
+      ctaLabel: "Close evidence gap",
+      href: "#artifacts",
+      target: {
+        runId: "mock-ask",
+        evidenceGap: "Current response-time baseline",
+        artifactPath: "runs/mock-ask/decision_memo.md",
+      },
+    },
+    {
+      id: "human-review-remediation",
+      gateCheckId: "human_review",
+      label: "Review key claims",
+      status: "warn",
+      priority: "medium",
+      actionType: "review_claims",
+      rationale: "No human claim approval is recorded yet.",
+      recommendedAction: "Approve or reject key claims before sharing.",
+      ctaLabel: "Review claims",
+      href: "#artifacts",
+      target: { runId: "mock-ask", artifactPath: "runs/mock-ask/decision_memo.md" },
+    },
+    {
+      id: "lineage-remediation",
+      gateCheckId: "lineage_delta",
+      label: "Compare rerun movement",
+      status: "warn",
+      priority: "medium",
+      actionType: "compare_rerun",
+      rationale: "No decision delta is available for the latest project run.",
+      recommendedAction: "Compare a source-backed rerun against the prior decision state.",
+      ctaLabel: "Compare rerun",
+      href: "#lineage",
+      target: { runId: "mock-ask", artifactPath: "runs/mock-ask/run_report.html" },
+    },
+  ],
+};
+
+let currentRemediationPlan = mockRemediationPlan;
+
 describe("Crux Studio Ask workflow", () => {
   beforeEach(() => {
+    currentRemediationPlan = mockRemediationPlan;
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     vi.stubGlobal(
       "URL",
@@ -613,7 +675,7 @@ describe("Crux Studio Ask workflow", () => {
         }
 
         if (url.endsWith("/api/projects/project-bakery/remediation-plan")) {
-          return new Response(JSON.stringify(mockRemediationPlan), {
+          return new Response(JSON.stringify(currentRemediationPlan), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           });
@@ -880,6 +942,52 @@ describe("Crux Studio Ask workflow", () => {
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith("/api/runs/mock-ask");
     });
+  });
+
+  it("guides evidence remediation into source intake and shows gate movement", async () => {
+    currentRemediationPlan = mockActionRequiredRemediationPlan;
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Remediation plan" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close missing evidence: Close evidence gap" }));
+    expect(await screen.findByRole("heading", { name: "Guided remediation" })).toBeInTheDocument();
+    expect(screen.getAllByText("Close missing evidence").length).toBeGreaterThan(0);
+    expect(screen.getByText("Watching gate: no gate change yet.")).toBeInTheDocument();
+    expect(screen.getByLabelText("New source pack")).toHaveValue("Evidence for Close missing evidence");
+    expect((screen.getByLabelText("Source content") as HTMLTextAreaElement).value).toContain(
+      "Current response-time baseline",
+    );
+
+    currentRemediationPlan = mockRemediationPlan;
+    fireEvent.click(screen.getByRole("button", { name: "Create source pack" }));
+    await waitFor(() => {
+      expect(screen.getByText("Gate changed after this action.")).toBeInTheDocument();
+    });
+  });
+
+  it("guides review, replay, and comparison remediation actions", async () => {
+    currentRemediationPlan = mockActionRequiredRemediationPlan;
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Remediation plan" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Review key claims: Review claims" }));
+    expect(screen.getByRole("tab", { name: "Claims" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getAllByText("Review key claims").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Replay run" }));
+    expect((await screen.findAllByText("mock-replay")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Compare rerun movement: Compare rerun" }));
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/runs/compare",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+    expect(await screen.findByText("Decision delta")).toBeInTheDocument();
+    expect(screen.getAllByText("Compare rerun movement").length).toBeGreaterThan(0);
   });
 
   it("loads run history and lets the user inspect claims, evidence, diagnostics, and trace", async () => {

@@ -25,15 +25,17 @@ Every phase must complete these steps before it is considered done:
 - Phase 17: Decision Record Dossier, implemented in Studio v0.14.
 - Phase 18: Decision Record Acceptance Gate, implemented in Studio v0.15.
 - Phase 19: Acceptance Gate Remediation Planner, implemented in Studio v0.16.
+- Phase 20: Guided Remediation Execution, implemented in Studio v0.17.
 
 ## Next Phase
 
-Phase 20: Guided Remediation Execution.
+Phase 21: Remediation Evidence Ledger.
 
 Goal:
 
-- Turn remediation-plan CTAs into guided in-product execution flows that preselect the right surface, preserve action context, and make it obvious when the action has changed the gate.
+- Persist a local audit trail of guided remediation starts, user-triggered actions, refreshed gate movement, and final action outcomes so the decision dossier can explain what changed and what the user did to change it.
 
 Why this is next:
 
-- Studio now derives the prioritized remediation sequence. The next product gap is making those actions feel executable rather than navigational: source actions should land in the source workflow with context, review actions should focus the relevant artifact, comparison actions should run the comparison path, and export actions should complete the handoff.
+- Studio now makes remediation actions executable. The next product gap is accountability: a serious decision workbench should preserve the action trail that explains which remediation steps were attempted, which ones changed the gate, and which artifacts prove the change.
+- This phase stays local-first and single-user. It does not introduce hosted auth, teams, permissions, or notifications.

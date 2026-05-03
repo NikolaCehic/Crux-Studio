@@ -1,5 +1,47 @@
 # Trace Log
 
+## 2026-05-03T12:15:00+02:00 - Phase 20 Guided Remediation Execution
+
+Intent:
+
+- Implement the next productization phase under the required phase contract: full implementation, E2E-style workflow coverage, smoke validation, spec validation, durable artifacts, and next-phase handoff.
+- Turn remediation-plan CTAs into guided execution flows that preserve action context and show whether the gate moved after the action started.
+- Apply the Impeccable product UI lens: `IMPECCABLE_PREFLIGHT: context=pass product=pass command_reference=pass shape=not_required image_gate=skipped:Phase 20 extends an existing workbench panel with guided action execution, no separate visual concept or generated imagery is needed mutation=open`.
+
+Implemented:
+
+- Added active guided remediation state in the Studio web app.
+- Added an inline `Guided remediation` panel with active action, priority, action type, start time, and gate-watch status.
+- Routed source and evidence actions into source intake with prefilled source-pack name and evidence-gap context.
+- Routed review actions into Claims, rerun actions into replay, comparison actions into the latest-run comparison flow, blocker actions into Sources or Diagnostics, and export actions through the existing dossier link.
+- Added remediation plan signature comparison so the guide reports gate movement after a refreshed project state changes the plan.
+- Cleared active guides on project change and added a manual clear action.
+- Added focused web workflow tests for evidence guidance, gate movement, claim review routing, replay, and comparison.
+- Added `docs/PHASE_20_GUIDED_REMEDIATION_EXECUTION_SPEC.md`.
+- Updated README, changelog, product context, product spec, UX spec, architecture spec, demo guide, productization plan, and phase execution protocol.
+
+Verification:
+
+- Focused web workflow test passed: `pnpm --filter @crux-studio/web test -- src/App.test.tsx`.
+- Focused web typecheck passed: `pnpm --filter @crux-studio/web check`.
+- Full Studio verification passed: `pnpm verify`.
+- Local smoke passed against the local Crux Harness provider: `pnpm smoke:local`.
+- Final source-backed smoke job: `job-20260503100842-6b0a1143`.
+- Final source-backed smoke run: `20260503T100842Z-how-should-a-support-team-reduce-first-response-`.
+- Final evidence base run: `20260503T100842Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence task: `task-d154e0b2-12-adversarial-scenario-remove-evidence`.
+- Final evidence closure rerun job: `job-20260503100843-d59f3950`.
+- Final evidence closure rerun: `20260503T100843Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence closure result: task `resolved`, rerun source count `1`, delta direction `improved`, closed gap count `1`, remaining blocker count `0`, comparison differences `7`, delta package bytes `6439`, lineage event count `20`, lineage delta count `1`, dossier approved claims `1`, dossier source count `1`, dossier package bytes `6146`, acceptance status `needs_review`, acceptance score `0.91`, acceptance checks `6 pass`, `2 warn`, `0 fail`, remediation status `action_required`, remediation actions `2`, remediation blocking actions `0`, remediation warning actions `2`.
+- Refreshed README screenshots:
+  - `docs/assets/crux-studio-workbench.png`
+  - `docs/assets/crux-studio-review-compare.png`
+
+Result:
+
+- Phase 20 is done.
+- Next phase: Phase 21 Remediation Evidence Ledger.
+
 ## 2026-05-03T11:38:00+02:00 - Phase 19 Acceptance Gate Remediation Planner
 
 Intent:

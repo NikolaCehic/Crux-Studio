@@ -40,7 +40,7 @@ The smoke check verifies:
 - demo question availability
 - run indexing
 - bounded-agent summary availability when agent-aware runs exist
-- evidence closure, decision delta, lineage, and decision record dossier export in local mode
+- evidence closure, decision delta, lineage, decision record dossier export, acceptance gate, and remediation plan in local mode
 
 ## Canonical Demo Questions
 
@@ -65,8 +65,10 @@ Studio exposes these from `/api/demos` and the ask panel:
 9. Replay the run.
 10. Compare latest runs and show what changed.
 11. Read the decision lineage.
-12. Export the decision record dossier.
+12. Check the acceptance gate.
+13. Start a guided remediation action and show that Studio opens the matching workflow.
+14. Export the decision record dossier.
 
 ## What To Emphasize
 
-Crux Studio is not a chat UI. The product objects are the run and the decision record: memo, claims, evidence, source state, bounded agents, eval council, diagnostics, review, trace, replay, lineage, and export.
+Crux Studio is not a chat UI. The product objects are the run and the decision record: memo, claims, evidence, source state, bounded agents, eval council, diagnostics, review, trace, replay, lineage, acceptance, remediation, and export.

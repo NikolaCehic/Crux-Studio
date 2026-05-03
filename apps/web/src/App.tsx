@@ -113,6 +113,19 @@ type SourceDraftFile = {
   size: number;
 };
 
+type RemediationAction = DecisionRemediationPlan["actions"][number];
+
+type ActiveRemediationGuide = {
+  action: RemediationAction;
+  startedAt: string;
+  planSignature: string;
+};
+
+type RemediationGuideOutcome = {
+  status: "watching" | "changed" | "cleared";
+  label: string;
+};
+
 type ArtifactTab =
   | "Brief"
   | "Memo"
@@ -190,6 +203,7 @@ export function App() {
   const [decisionRecord, setDecisionRecord] = useState<DecisionRecordDossier | null>(null);
   const [acceptanceGate, setAcceptanceGate] = useState<DecisionAcceptanceGate | null>(null);
   const [remediationPlan, setRemediationPlan] = useState<DecisionRemediationPlan | null>(null);
+  const [activeRemediationGuide, setActiveRemediationGuide] = useState<ActiveRemediationGuide | null>(null);
   const [jobs, setJobs] = useState<RunJob[]>([]);
   const [activeJob, setActiveJob] = useState<RunJob | null>(null);
   const [activeTab, setActiveTab] = useState<ArtifactTab>("Brief");
@@ -218,6 +232,10 @@ export function App() {
         (pack) => !selectedProjectId || pack.projectId === selectedProjectId,
       ),
     [selectedProjectId, sourcePacks],
+  );
+  const remediationGuideOutcome = useMemo(
+    () => getRemediationGuideOutcome(activeRemediationGuide, remediationPlan),
+    [activeRemediationGuide, remediationPlan],
   );
 
   useEffect(() => {
@@ -303,6 +321,7 @@ export function App() {
     void refreshDecisionRecord(selectedProjectId);
     void refreshAcceptanceGate(selectedProjectId);
     void refreshRemediationPlan(selectedProjectId);
+    setActiveRemediationGuide(null);
   }, [selectedProjectId]);
 
   useEffect(() => {
@@ -732,6 +751,49 @@ export function App() {
     }
   }
 
+  function handleStartRemediationAction(action: RemediationAction) {
+    setActiveRemediationGuide({
+      action,
+      startedAt: new Date().toISOString(),
+      planSignature: remediationPlan ? remediationPlanSignature(remediationPlan) : "",
+    });
+    setError(null);
+
+    if (action.actionType === "attach_sources" || action.actionType === "close_evidence_gap") {
+      const evidenceGap = action.target?.evidenceGap ?? action.recommendedAction;
+      setSourcePackName(`Evidence for ${action.label}`);
+      setSourceDraft(`# Evidence note\n\n${evidenceGap}\n\n`);
+      setActiveTab("Sources");
+      scrollToSection("ask");
+      return;
+    }
+
+    if (action.actionType === "review_claims") {
+      setActiveTab("Claims");
+      scrollToSection("memo");
+      return;
+    }
+
+    if (action.actionType === "compare_rerun") {
+      setActiveTab("Brief");
+      scrollToSection("lineage");
+      void handleCompareLatest();
+      return;
+    }
+
+    if (action.actionType === "regenerate_run") {
+      setActiveTab("Brief");
+      scrollToSection("memo");
+      void handleReplay();
+      return;
+    }
+
+    if (action.actionType === "resolve_blocker") {
+      setActiveTab(action.target?.evidenceGap ? "Sources" : "Diagnostics");
+      scrollToSection(action.href?.startsWith("#") ? action.href.slice(1) : "acceptance");
+    }
+  }
+
   async function handleExportDeltaPackage() {
     if (!comparison) {
       return;
@@ -763,7 +825,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.16 · workspace
+              v0.17 · workspace
             </p>
           </div>
         </div>
@@ -975,6 +1037,8 @@ export function App() {
             isLoadingLineage={isLoadingLineage}
             isLoadingRemediationPlan={isLoadingRemediationPlan}
             lineage={lineage}
+            remediationGuide={activeRemediationGuide}
+            remediationGuideOutcome={remediationGuideOutcome}
             remediationPlan={remediationPlan}
             review={review}
             selectedRun={selectedRun}
@@ -985,6 +1049,8 @@ export function App() {
             onReplay={() => void handleReplay()}
             onResolveEvidenceTask={(taskId) => void handleResolveEvidenceTask(taskId)}
             onReviewClaim={handleReviewClaim}
+            onStartRemediationAction={handleStartRemediationAction}
+            onClearRemediationGuide={() => setActiveRemediationGuide(null)}
           />
         </section>
       </section>
@@ -1501,6 +1567,8 @@ function MemoPanel({
   isLoadingLineage,
   isLoadingRemediationPlan,
   lineage,
+  remediationGuide,
+  remediationGuideOutcome,
   remediationPlan,
   review,
   selectedRun,
@@ -1511,6 +1579,8 @@ function MemoPanel({
   onReplay,
   onResolveEvidenceTask,
   onReviewClaim,
+  onStartRemediationAction,
+  onClearRemediationGuide,
 }: {
   activeTab: ArtifactTab;
   acceptanceGate: DecisionAcceptanceGate | null;
@@ -1525,6 +1595,8 @@ function MemoPanel({
   isLoadingLineage: boolean;
   isLoadingRemediationPlan: boolean;
   lineage: DecisionLineage | null;
+  remediationGuide: ActiveRemediationGuide | null;
+  remediationGuideOutcome: RemediationGuideOutcome | null;
   remediationPlan: DecisionRemediationPlan | null;
   review: StudioReview | null;
   selectedRun: RunBundle | RunSummary | null;
@@ -1535,6 +1607,8 @@ function MemoPanel({
   onReplay: () => void;
   onResolveEvidenceTask: (taskId: string) => void;
   onReviewClaim: (claimId: string, status: "approved" | "rejected") => void;
+  onStartRemediationAction: (action: RemediationAction) => void;
+  onClearRemediationGuide: () => void;
 }) {
   return (
     <Card id="memo" aria-live="polite" className="min-h-[680px]">
@@ -1591,8 +1665,12 @@ function MemoPanel({
               isLoading={isLoadingAcceptanceGate}
             />
             <RemediationPlanPanel
+              guide={remediationGuide}
+              guideOutcome={remediationGuideOutcome}
               isLoading={isLoadingRemediationPlan}
               remediationPlan={remediationPlan}
+              onClearGuide={onClearRemediationGuide}
+              onStartAction={onStartRemediationAction}
             />
             <DecisionRecordPanel
               decisionRecord={decisionRecord}
@@ -2377,11 +2455,19 @@ function AcceptanceGatePanel({
 }
 
 function RemediationPlanPanel({
+  guide,
+  guideOutcome,
   isLoading,
   remediationPlan,
+  onClearGuide,
+  onStartAction,
 }: {
+  guide: ActiveRemediationGuide | null;
+  guideOutcome: RemediationGuideOutcome | null;
   isLoading: boolean;
   remediationPlan: DecisionRemediationPlan | null;
+  onClearGuide: () => void;
+  onStartAction: (action: RemediationAction) => void;
 }) {
   return (
     <section
@@ -2423,6 +2509,14 @@ function RemediationPlanPanel({
         </p>
       ) : (
         <>
+          {guide ? (
+            <RemediationGuidePanel
+              guide={guide}
+              outcome={guideOutcome}
+              onClear={onClearGuide}
+            />
+          ) : null}
+
           <div className="grid gap-3 rounded-md border bg-background p-3 2xl:grid-cols-[minmax(0,1fr)_auto]">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -2452,12 +2546,77 @@ function RemediationPlanPanel({
 
           <ol className="grid gap-2">
             {remediationPlan.actions.map((action) => (
-              <RemediationActionItem action={action} key={action.id} />
+              <RemediationActionItem
+                action={action}
+                key={action.id}
+                onStartAction={onStartAction}
+              />
             ))}
           </ol>
         </>
       )}
     </section>
+  );
+}
+
+function RemediationGuidePanel({
+  guide,
+  outcome,
+  onClear,
+}: {
+  guide: ActiveRemediationGuide;
+  outcome: RemediationGuideOutcome | null;
+  onClear: () => void;
+}) {
+  const action = guide.action;
+  const label = outcome?.label ?? "Watching gate: no gate change yet.";
+
+  return (
+    <div className="grid gap-3 rounded-md border bg-background p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+            Active action
+          </p>
+          <h4 className="mt-1 font-semibold">Guided remediation</h4>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">{action.label}</Badge>
+            <RemediationPriorityBadge priority={action.priority} />
+            <Badge variant="outline">{formatStatusText(action.actionType)}</Badge>
+            <Badge variant="outline">Started {formatTimestamp(guide.startedAt)}</Badge>
+          </div>
+        </div>
+        <Button aria-label="Clear guided remediation" size="icon-sm" type="button" variant="ghost" onClick={onClear}>
+          <X className="size-3.5" />
+        </Button>
+      </div>
+      <div className="grid gap-2 rounded-md border bg-muted/25 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <RemediationGuideOutcomeBadge status={outcome?.status ?? "watching"} />
+          <p className="font-medium">{label}</p>
+        </div>
+        <p className="text-muted-foreground">{remediationGuideStep(action)}</p>
+        {action.target?.evidenceGap ? (
+          <p className="line-clamp-2 text-xs text-muted-foreground">
+            Evidence gap: {action.target.evidenceGap}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function RemediationGuideOutcomeBadge({ status }: { status: RemediationGuideOutcome["status"] }) {
+  const classes: Record<RemediationGuideOutcome["status"], string> = {
+    watching: "border-sky-300 bg-sky-100 text-sky-950",
+    changed: "border-amber-300 bg-amber-100 text-amber-950",
+    cleared: "border-emerald-300 bg-emerald-100 text-emerald-900",
+  };
+
+  return (
+    <Badge className={cn("shrink-0", classes[status])} variant="outline">
+      {formatStatusText(status)}
+    </Badge>
   );
 }
 
@@ -2474,9 +2633,13 @@ function RemediationMetric({ label, value }: { label: string; value: string }) {
 
 function RemediationActionItem({
   action,
+  onStartAction,
 }: {
-  action: DecisionRemediationPlan["actions"][number];
+  action: RemediationAction;
+  onStartAction: (action: RemediationAction) => void;
 }) {
+  const shouldNavigate = action.actionType === "export_dossier" && action.href;
+
   return (
     <li className="rounded-md border bg-background p-3">
       <div className="grid gap-3 2xl:grid-cols-[minmax(0,1fr)_auto]">
@@ -2499,15 +2662,26 @@ function RemediationActionItem({
             ) : null}
           </div>
         </div>
-        {action.href ? (
+        {shouldNavigate ? (
           <Button asChild className="w-full 2xl:w-auto" size="sm" variant="outline">
-            <a aria-label={`${action.label}: ${action.ctaLabel}`} href={action.href}>
+            <a
+              aria-label={`${action.label}: ${action.ctaLabel}`}
+              href={action.href}
+              onClick={() => onStartAction(action)}
+            >
               <SearchCheck className="size-3.5" />
               {action.ctaLabel}
             </a>
           </Button>
         ) : (
-          <Button className="w-full 2xl:w-auto" disabled size="sm" type="button" variant="outline">
+          <Button
+            aria-label={`${action.label}: ${action.ctaLabel}`}
+            className="w-full 2xl:w-auto"
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={() => onStartAction(action)}
+          >
             <SearchCheck className="size-3.5" />
             {action.ctaLabel}
           </Button>
@@ -3306,6 +3480,77 @@ function runJobLabel(status: RunJob["status"]): string {
   };
 
   return labels[status];
+}
+
+function remediationPlanSignature(plan: DecisionRemediationPlan): string {
+  return [
+    plan.status,
+    plan.summary.blockingActions,
+    plan.summary.warningActions,
+    plan.summary.readyActions,
+    plan.actions.map((action) => `${action.id}:${action.status}`).join(","),
+  ].join("|");
+}
+
+function getRemediationGuideOutcome(
+  guide: ActiveRemediationGuide | null,
+  plan: DecisionRemediationPlan | null,
+): RemediationGuideOutcome | null {
+  if (!guide || !plan) {
+    return null;
+  }
+
+  const signatureChanged = remediationPlanSignature(plan) !== guide.planSignature;
+  const currentAction = plan.actions.find((action) => action.id === guide.action.id);
+
+  if (signatureChanged && !currentAction) {
+    return {
+      status: "cleared",
+      label: "Gate changed after this action.",
+    };
+  }
+
+  if (signatureChanged) {
+    return {
+      status: "changed",
+      label: "Gate changed after this action.",
+    };
+  }
+
+  return {
+    status: "watching",
+    label: "Watching gate: no gate change yet.",
+  };
+}
+
+function remediationGuideStep(action: RemediationAction): string {
+  if (action.actionType === "attach_sources" || action.actionType === "close_evidence_gap") {
+    return "Source draft is prepared from this action. Attach or paste evidence, create the source pack, then rerun or resolve the matching evidence task.";
+  }
+
+  if (action.actionType === "review_claims") {
+    return "Claims are open. Approve or reject the key claims, then watch the gate for review movement.";
+  }
+
+  if (action.actionType === "compare_rerun") {
+    return "Comparison is selected. Compare the latest runs to confirm whether evidence closure improved the decision.";
+  }
+
+  if (action.actionType === "regenerate_run") {
+    return "Replay is queued from the current run. Review the refreshed artifacts before sharing.";
+  }
+
+  if (action.actionType === "export_dossier") {
+    return "Dossier export is ready. Save the Markdown record with the decision owner.";
+  }
+
+  return "Diagnostics are selected. Resolve the blocker, refresh the project state, then watch the gate.";
+}
+
+function scrollToSection(sectionId: string) {
+  window.setTimeout(() => {
+    document.getElementById(sectionId)?.scrollIntoView?.({ block: "start" });
+  }, 0);
 }
 
 function evidenceTaskKindLabel(kind: StudioEvidenceTask["kind"]): string {

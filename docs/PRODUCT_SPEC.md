@@ -37,6 +37,7 @@ The correct UX is a Run Studio:
 6. Review, annotate, and export the final memo.
 7. Compare a newer run to an older run.
 8. Assemble a decision record that can be shared without reconstructing separate tabs.
+9. Follow acceptance-gate remediation actions without leaving the workbench context.
 
 ## Non-Goals
 
@@ -70,6 +71,9 @@ The correct UX is a Run Studio:
 - Comparison: diff between two runs.
 - Lineage: project-level chain of runs, evidence tasks, reruns, and deltas.
 - Decision record: derived project dossier for the current recommendation, review state, source state, lineage, artifacts, and final memo.
+- Acceptance gate: derived readiness status for the latest project dossier.
+- Remediation plan: prioritized next actions for non-passing acceptance checks.
+- Guided remediation: active UI state that routes a remediation action into the matching workflow and watches for gate movement.
 
 ## Success Criteria
 
