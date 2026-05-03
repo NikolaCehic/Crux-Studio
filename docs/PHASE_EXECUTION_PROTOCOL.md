@@ -27,16 +27,17 @@ Every phase must complete these steps before it is considered done:
 - Phase 19: Acceptance Gate Remediation Planner, implemented in Studio v0.16.
 - Phase 20: Guided Remediation Execution, implemented in Studio v0.17.
 - Phase 21: Remediation Evidence Ledger, implemented in Studio v0.18.
+- Phase 22: Decision Handoff Review Pack, implemented in Studio v0.19.
 
 ## Next Phase
 
-Phase 22: Decision Handoff Review Pack.
+Phase 23: Local Decision Archive Snapshot.
 
 Goal:
 
-- Create a final pre-export review surface that combines the decision record, acceptance gate, remediation evidence ledger, lineage, human review, source summary, and artifact links into a share-ready handoff pack.
+- Create an immutable local snapshot for an exported decision, including handoff pack, decision record, latest run id, source state, remediation ledger summary, artifact paths, and content hashes.
 
 Why this is next:
 
-- Studio now records what the user did to remediate the decision. The next product gap is handoff clarity: before a decision leaves Studio, the user should see one final review pack that explains readiness, evidence, remediation, review status, and exportable artifacts.
+- Studio can now derive a final handoff review. The next product gap is preservation: once a user exports or shares a decision, Studio should be able to pin the exact local decision state that left the workbench.
 - This phase stays local-first and single-user. It does not introduce hosted auth, teams, permissions, hosted storage, or notifications.

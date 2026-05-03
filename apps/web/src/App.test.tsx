@@ -471,6 +471,81 @@ const mockAcceptanceGate = {
   ],
 };
 
+const mockHandoffReviewPack = {
+  projectId: "project-bakery",
+  projectName: "Bakery Operations",
+  title: "Decision Handoff Review Pack",
+  latestRunId: "mock-replay",
+  status: "ready",
+  label: "Ready for handoff",
+  generatedAt: "2026-05-01T10:06:00.000Z",
+  recommendedAction: "Export handoff pack and decision record.",
+  summary: {
+    acceptanceScore: 1,
+    acceptancePassCount: 8,
+    acceptanceWarnCount: 0,
+    acceptanceFailCount: 0,
+    openRemediationActions: 0,
+    completedRemediationActions: 1,
+    remediationEventCount: 2,
+    sourceCount: 1,
+    missingEvidenceCount: 0,
+    approvedClaimCount: 1,
+    rejectedClaimCount: 0,
+    lineageEventCount: 5,
+    deltaCount: 1,
+    artifactCount: 3,
+  },
+  sections: [
+    {
+      id: "decision",
+      label: "Decision summary",
+      status: "pass",
+      summary: "Recommendation and next step are present.",
+      detail: "Use a staged approach.",
+      nextAction: "Keep the recommendation paired with the current run.",
+      evidence: ["Latest run: mock-replay"],
+      href: "#memo",
+    },
+    {
+      id: "acceptance",
+      label: "Acceptance gate",
+      status: "pass",
+      summary: "8/8 checks pass.",
+      detail: "The decision record is ready to share.",
+      nextAction: "Keep acceptance evidence with the handoff.",
+      evidence: ["Acceptance score: 100%"],
+      href: "#acceptance",
+    },
+    {
+      id: "remediation",
+      label: "Remediation evidence",
+      status: "pass",
+      summary: "1 completed action from 2 ledger events.",
+      detail: "Guided remediation activity is recorded.",
+      nextAction: "Preserve ledger events in the handoff.",
+      evidence: ["Action Completed: Close missing evidence"],
+      href: "#remediation-ledger",
+    },
+    {
+      id: "lineage",
+      label: "Decision lineage",
+      status: "pass",
+      summary: "Improved delta available.",
+      detail: "The latest rerun improved the decision state.",
+      nextAction: "Reference the latest delta.",
+      evidence: ["Decision delta ready"],
+      href: "#lineage",
+    },
+  ],
+  exports: {
+    handoffReviewPackHref: "/api/projects/project-bakery/export/handoff-review-pack",
+    decisionRecordDossierHref: "/api/projects/project-bakery/export/decision-record-dossier",
+    decisionPackageHref: "/api/runs/mock-replay/export/decision-package",
+    reviewedMemoHref: "/api/runs/mock-replay/export/reviewed-memo",
+  },
+};
+
 const mockRemediationPlan = {
   projectId: "project-bakery",
   projectName: "Bakery Operations",
@@ -709,6 +784,26 @@ describe("Crux Studio Ask workflow", () => {
           });
         }
 
+        if (url.endsWith("/api/projects/project-bakery/handoff-review-pack")) {
+          return new Response(JSON.stringify(mockHandoffReviewPack), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (url.endsWith("/api/projects/project-bakery/export/handoff-review-pack")) {
+          return new Response(
+            "# Crux Decision Handoff Review Pack\n\n## Handoff Status\n\nReady for handoff.",
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "text/markdown; charset=utf-8",
+                "Content-Disposition": "attachment; filename=\"bakery-operations-handoff-review-pack.md\"",
+              },
+            },
+          );
+        }
+
         if (url.endsWith("/api/projects/project-bakery/remediation-plan")) {
           return new Response(JSON.stringify(currentRemediationPlan), {
             status: 200,
@@ -794,7 +889,7 @@ describe("Crux Studio Ask workflow", () => {
                 {
                   id: "mock",
                   status: "active",
-                  capabilities: ["ask", "inspect", "sources", "review", "compare", "agents", "lifecycle", "evidence-tasks", "lineage", "dossier", "acceptance-gate", "remediation-plan", "remediation-ledger"],
+                  capabilities: ["ask", "inspect", "sources", "review", "compare", "agents", "lifecycle", "evidence-tasks", "lineage", "dossier", "acceptance-gate", "remediation-plan", "remediation-ledger", "handoff-review-pack"],
                 },
               ],
             }),
@@ -995,6 +1090,13 @@ describe("Crux Studio Ask workflow", () => {
     expect(await screen.findByRole("heading", { name: "Remediation plan" })).toBeInTheDocument();
     expect(screen.getByText("Acceptance work is complete.")).toBeInTheDocument();
     expect(screen.getByText("Export accepted dossier")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Decision handoff review" })).toBeInTheDocument();
+    expect(screen.getByText("Ready for handoff")).toBeInTheDocument();
+    expect(screen.getByText("Export handoff pack and decision record.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Export handoff pack" })).toHaveAttribute(
+      "href",
+      "/api/projects/project-bakery/export/handoff-review-pack",
+    );
     expect(screen.getByText("Decision Record Dossier")).toBeInTheDocument();
     expect(screen.getByText("Final recommendation")).toBeInTheDocument();
     expect(screen.getByText(/Approved claims: claim-1/)).toBeInTheDocument();
@@ -1022,7 +1124,7 @@ describe("Crux Studio Ask workflow", () => {
 
     expect(await screen.findByRole("heading", { name: "Remediation plan" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Close missing evidence: Close evidence gap" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Close missing evidence: Close evidence gap" }));
     expect(await screen.findByRole("heading", { name: "Guided remediation" })).toBeInTheDocument();
     expect(screen.getAllByText("Close missing evidence").length).toBeGreaterThan(0);
     expect(screen.getByText("Watching gate: no gate change yet.")).toBeInTheDocument();

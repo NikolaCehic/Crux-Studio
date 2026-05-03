@@ -436,6 +436,7 @@ export function buildServer({
           "acceptance-gate",
           "remediation-plan",
           "remediation-ledger",
+          "handoff-review-pack",
         ],
       },
     ],
@@ -625,6 +626,44 @@ export function buildServer({
         project,
         await store.listRemediationLedgerEvents(project.id),
       );
+    },
+  );
+
+  app.get<{ Params: { projectId: string } }>(
+    "/api/projects/:projectId/handoff-review-pack",
+    async (request, reply) => {
+      try {
+        const handoffPack = await buildProjectDecisionHandoffReviewPack(request.params.projectId);
+        if (!handoffPack) {
+          return reply.code(404).send({ message: "Handoff review pack requires a project run." });
+        }
+
+        return handoffPack;
+      } catch {
+        return reply.code(404).send({ message: "Handoff review pack failed to load." });
+      }
+    },
+  );
+
+  app.get<{ Params: { projectId: string } }>(
+    "/api/projects/:projectId/export/handoff-review-pack",
+    async (request, reply) => {
+      try {
+        const handoffPack = await buildProjectDecisionHandoffReviewPack(request.params.projectId);
+        if (!handoffPack) {
+          return reply.code(404).send({ message: "Handoff review pack requires a project run." });
+        }
+
+        return reply
+          .type("text/markdown; charset=utf-8")
+          .header(
+            "content-disposition",
+            `attachment; filename="${safeFilename(handoffPack.projectName)}-handoff-review-pack.md"`,
+          )
+          .send(renderDecisionHandoffReviewPack(handoffPack));
+      } catch {
+        return reply.code(404).send({ message: "Handoff review pack export failed." });
+      }
     },
   );
 
@@ -1078,6 +1117,34 @@ export function buildServer({
     });
   }
 
+  async function buildProjectDecisionHandoffReviewPack(projectId: string) {
+    const context = await loadProjectDecisionContext(projectId);
+    const latestRun = context ? sortRunsNewestFirst(context.runs)[0] : undefined;
+    if (!context || !latestRun) {
+      return null;
+    }
+
+    const dossier = buildDecisionRecordDossier({
+      project: context.project,
+      latestRun,
+      sourcePacks: context.sourcePacks,
+      review: await store.getReview(latestRun.runId),
+      lineage: context.lineage,
+      remediationLedger: context.remediationLedger,
+    });
+    const acceptanceGate = buildDecisionAcceptanceGate(dossier);
+    const remediationPlan = buildDecisionRemediationPlan(dossier, acceptanceGate);
+
+    return buildDecisionHandoffReviewPack({
+      dossier,
+      acceptanceGate,
+      remediationPlan,
+      remediationLedger: context.remediationLedger,
+      lineage: context.lineage,
+      generatedAt: dossier.createdAt,
+    });
+  }
+
   return app;
 }
 
@@ -1276,6 +1343,62 @@ type DecisionRemediationPlan = {
     readyActions: number;
   };
   actions: DecisionRemediationAction[];
+};
+
+type DecisionHandoffReviewStatus = "ready" | "needs_review" | "blocked";
+
+type DecisionHandoffReviewSectionStatus = "pass" | "warn" | "fail";
+
+type DecisionHandoffReviewSection = {
+  id:
+    | "decision"
+    | "acceptance"
+    | "sources"
+    | "human_review"
+    | "remediation"
+    | "lineage"
+    | "artifacts";
+  label: string;
+  status: DecisionHandoffReviewSectionStatus;
+  summary: string;
+  detail: string;
+  nextAction: string;
+  evidence: string[];
+  href?: string;
+};
+
+type DecisionHandoffReviewPack = {
+  projectId: string;
+  projectName: string;
+  title: "Decision Handoff Review Pack";
+  latestRunId: string;
+  status: DecisionHandoffReviewStatus;
+  label: string;
+  generatedAt: string;
+  recommendedAction: string;
+  summary: {
+    acceptanceScore: number;
+    acceptancePassCount: number;
+    acceptanceWarnCount: number;
+    acceptanceFailCount: number;
+    openRemediationActions: number;
+    completedRemediationActions: number;
+    remediationEventCount: number;
+    sourceCount: number;
+    missingEvidenceCount: number;
+    approvedClaimCount: number;
+    rejectedClaimCount: number;
+    lineageEventCount: number;
+    deltaCount: number;
+    artifactCount: number;
+  };
+  sections: DecisionHandoffReviewSection[];
+  exports: {
+    handoffReviewPackHref: string;
+    decisionRecordDossierHref: string;
+    decisionPackageHref: string;
+    reviewedMemoHref: string;
+  };
 };
 
 function enrichRun<T extends { runId: string }>(
@@ -1816,6 +1939,238 @@ function buildDecisionRemediationLedger(
   };
 }
 
+function buildDecisionHandoffReviewPack({
+  dossier,
+  acceptanceGate,
+  remediationPlan,
+  remediationLedger,
+  lineage,
+  generatedAt,
+}: {
+  dossier: DecisionRecordDossier;
+  acceptanceGate: DecisionAcceptanceGate;
+  remediationPlan: DecisionRemediationPlan;
+  remediationLedger: DecisionRemediationLedger;
+  lineage: DecisionLineage;
+  generatedAt: string;
+}): DecisionHandoffReviewPack {
+  const openRemediationActions =
+    remediationPlan.summary.blockingActions + remediationPlan.summary.warningActions;
+  const artifactCount = [
+    dossier.keyArtifacts.input,
+    dossier.keyArtifacts.memo,
+    dossier.keyArtifacts.report,
+  ].filter(Boolean).length;
+  const hasMemoArtifact = Boolean(dossier.keyArtifacts.memo);
+  const hasReportArtifact = Boolean(dossier.keyArtifacts.report);
+  const artifactStatus: DecisionHandoffReviewSectionStatus = hasMemoArtifact
+    ? artifactCount >= 2
+      ? "pass"
+      : "warn"
+    : "fail";
+  const approvedClaimCount = dossier.review.approvedClaims.length;
+  const rejectedClaimCount = dossier.review.rejectedClaims.length;
+  const latestDelta = dossier.lineage.latestDelta;
+
+  const sections: DecisionHandoffReviewSection[] = [
+    {
+      id: "decision",
+      label: "Decision summary",
+      status: dossier.recommendation && dossier.nextStep ? "pass" : "warn",
+      summary: dossier.recommendation && dossier.nextStep
+        ? "Recommendation and next step are present."
+        : "The handoff is missing a recommendation or next step.",
+      detail: dossier.recommendation || "No recommendation is available yet.",
+      nextAction: dossier.nextStep || "Regenerate the latest run before handoff.",
+      evidence: [
+        `Question: ${dossier.question}`,
+        `Latest run: ${dossier.latestRunId}`,
+      ],
+      href: "#memo",
+    },
+    {
+      id: "acceptance",
+      label: "Acceptance gate",
+      status: acceptanceGate.status === "accepted"
+        ? "pass"
+        : acceptanceGate.status === "blocked"
+          ? "fail"
+          : "warn",
+      summary: `${acceptanceGate.summary.passCount}/${acceptanceGate.summary.totalCount} checks pass at ${formatPercent(acceptanceGate.score)}.`,
+      detail: acceptanceGate.label,
+      nextAction: acceptanceGate.recommendedAction,
+      evidence: [
+        `Acceptance score: ${formatPercent(acceptanceGate.score)}`,
+        `Warnings: ${acceptanceGate.summary.warnCount}`,
+        `Failures: ${acceptanceGate.summary.failCount}`,
+        ...acceptanceGate.checks
+          .filter((check) => check.status !== "pass")
+          .slice(0, 3)
+          .map((check) => `${check.label}: ${check.detail}`),
+      ],
+      href: "#acceptance",
+    },
+    {
+      id: "sources",
+      label: "Source and evidence state",
+      status: dossier.sourceSummary.sourceCount === 0
+        ? "fail"
+        : dossier.sourceSummary.missingEvidence.length > 0
+          ? "warn"
+          : "pass",
+      summary: `${dossier.sourceSummary.sourceCount} ${plural("source", dossier.sourceSummary.sourceCount)}, ${dossier.sourceSummary.missingEvidence.length} open ${plural("gap", dossier.sourceSummary.missingEvidence.length)}.`,
+      detail: dossier.sourceSummary.sourcePackName
+        ? `Current source pack: ${dossier.sourceSummary.sourcePackName}.`
+        : "No source pack is attached to the latest run.",
+      nextAction: dossier.sourceSummary.sourceCount === 0
+        ? "Attach source material and rerun before handoff."
+        : dossier.sourceSummary.missingEvidence[0] ?? "Keep source inventory with the handoff.",
+      evidence: [
+        `Chunks: ${dossier.sourceSummary.sourceChunkCount}`,
+        `Source pack: ${dossier.sourceSummary.sourcePackName ?? "none"}`,
+        ...dossier.sourceSummary.missingEvidence.slice(0, 3).map((gap) => `Missing: ${gap}`),
+      ],
+      href: "#artifacts",
+    },
+    {
+      id: "human_review",
+      label: "Human review",
+      status: rejectedClaimCount > 0 ? "fail" : approvedClaimCount > 0 ? "pass" : "warn",
+      summary: `${approvedClaimCount} approved, ${rejectedClaimCount} rejected.`,
+      detail: rejectedClaimCount > 0
+        ? "Rejected claims remain in the latest review state."
+        : approvedClaimCount > 0
+          ? "Human review is attached to the latest run."
+          : "No approved claims are attached to the latest run.",
+      nextAction: rejectedClaimCount > 0
+        ? "Resolve rejected claims before handoff."
+        : approvedClaimCount > 0
+          ? "Keep reviewer rationale with the handoff."
+          : "Approve or reject key claims before sharing.",
+      evidence: [
+        `Approved claims: ${dossier.review.approvedClaims.join(", ") || "none"}`,
+        `Rejected claims: ${dossier.review.rejectedClaims.join(", ") || "none"}`,
+        `Evidence annotations: ${dossier.review.evidenceAnnotations.length}`,
+      ],
+      href: "#artifacts",
+    },
+    {
+      id: "remediation",
+      label: "Remediation evidence",
+      status: remediationPlan.summary.blockingActions > 0
+        ? "fail"
+        : openRemediationActions > 0
+          ? "warn"
+          : "pass",
+      summary: `${remediationLedger.summary.completedActionCount} completed ${plural("action", remediationLedger.summary.completedActionCount)} from ${remediationLedger.summary.eventCount} ledger ${plural("event", remediationLedger.summary.eventCount)}.`,
+      detail: openRemediationActions > 0
+        ? `${openRemediationActions} remediation ${plural("action", openRemediationActions)} still need attention.`
+        : "Guided remediation activity is recorded or no remediation is open.",
+      nextAction: openRemediationActions > 0
+        ? remediationPlan.recommendedAction
+        : "Preserve remediation evidence in the handoff.",
+      evidence: [
+        `Plan status: ${formatStatusText(remediationPlan.status)}`,
+        `Gate movements: ${remediationLedger.summary.gateMovementCount}`,
+        ...remediationLedger.events
+          .slice(0, 3)
+          .map((event) => `${formatStatusText(event.eventType)}: ${event.action.label}`),
+      ],
+      href: "#remediation-ledger",
+    },
+    {
+      id: "lineage",
+      label: "Decision lineage",
+      status: latestDelta?.direction === "improved"
+        ? "pass"
+        : latestDelta?.direction === "regressed"
+          ? "fail"
+          : "warn",
+      summary: `${lineage.events.length} lineage ${plural("event", lineage.events.length)}, ${lineage.summary.deltaCount} ${plural("delta", lineage.summary.deltaCount)}.`,
+      detail: latestDelta
+        ? `${latestDelta.title}: ${latestDelta.detail}`
+        : "No decision delta is available for the latest run.",
+      nextAction: latestDelta?.nextStep ?? lineage.summary.nextStep,
+      evidence: [
+        `Latest readiness: ${lineage.summary.latestReadiness ?? "unknown"}`,
+        `Latest trust: ${lineage.summary.latestTrust ?? "unknown"}`,
+        `Delta direction: ${latestDelta?.direction ?? "none"}`,
+      ],
+      href: "#lineage",
+    },
+    {
+      id: "artifacts",
+      label: "Exportable artifacts",
+      status: artifactStatus,
+      summary: `${artifactCount}/3 key artifacts available.`,
+      detail: hasMemoArtifact && hasReportArtifact
+        ? "Memo and report paths are ready for export review."
+        : hasMemoArtifact
+          ? "Memo export is ready; optional input or report paths are missing."
+          : "The latest run is missing a memo artifact.",
+      nextAction: hasMemoArtifact
+        ? "Export the handoff pack and decision record."
+        : "Regenerate the latest run before handoff.",
+      evidence: [
+        `Input: ${dossier.keyArtifacts.input ?? "none"}`,
+        `Memo: ${dossier.keyArtifacts.memo ?? "none"}`,
+        `Report: ${dossier.keyArtifacts.report ?? "none"}`,
+      ],
+      href: "#decision-record",
+    },
+  ];
+
+  const firstFail = sections.find((section) => section.status === "fail");
+  const firstWarn = sections.find((section) => section.status === "warn");
+  const status: DecisionHandoffReviewStatus = firstFail
+    ? "blocked"
+    : firstWarn
+      ? "needs_review"
+      : "ready";
+
+  return {
+    projectId: dossier.projectId,
+    projectName: dossier.projectName,
+    title: "Decision Handoff Review Pack",
+    latestRunId: dossier.latestRunId,
+    status,
+    label:
+      status === "ready"
+        ? "Ready for handoff"
+        : status === "blocked"
+          ? "Blocked"
+          : "Needs review",
+    generatedAt,
+    recommendedAction:
+      status === "ready"
+        ? "Export handoff pack and decision record."
+        : firstFail?.nextAction ?? firstWarn?.nextAction ?? acceptanceGate.recommendedAction,
+    summary: {
+      acceptanceScore: acceptanceGate.score,
+      acceptancePassCount: acceptanceGate.summary.passCount,
+      acceptanceWarnCount: acceptanceGate.summary.warnCount,
+      acceptanceFailCount: acceptanceGate.summary.failCount,
+      openRemediationActions,
+      completedRemediationActions: remediationLedger.summary.completedActionCount,
+      remediationEventCount: remediationLedger.summary.eventCount,
+      sourceCount: dossier.sourceSummary.sourceCount,
+      missingEvidenceCount: dossier.sourceSummary.missingEvidence.length,
+      approvedClaimCount,
+      rejectedClaimCount,
+      lineageEventCount: lineage.events.length,
+      deltaCount: lineage.summary.deltaCount,
+      artifactCount,
+    },
+    sections,
+    exports: {
+      handoffReviewPackHref: `/api/projects/${dossier.projectId}/export/handoff-review-pack`,
+      decisionRecordDossierHref: `/api/projects/${dossier.projectId}/export/decision-record-dossier`,
+      decisionPackageHref: `/api/runs/${dossier.latestRunId}/export/decision-package`,
+      reviewedMemoHref: `/api/runs/${dossier.latestRunId}/export/reviewed-memo`,
+    },
+  };
+}
+
 function buildDecisionRemediationAction(
   dossier: DecisionRecordDossier,
   check: DecisionAcceptanceCheck,
@@ -2332,6 +2687,57 @@ ${ledger.recentEvents.length
 ## Final Memo
 
 ${dossier.memo}`;
+}
+
+function renderDecisionHandoffReviewPack(pack: DecisionHandoffReviewPack): string {
+  return `# Crux Decision Handoff Review Pack
+
+Project: ${pack.projectName}
+Latest run: ${pack.latestRunId}
+Generated: ${pack.generatedAt}
+
+## Handoff Status
+
+- Status: ${pack.label} (${pack.status})
+- Recommended action: ${pack.recommendedAction}
+- Acceptance score: ${formatPercent(pack.summary.acceptanceScore)}
+- Acceptance checks: ${pack.summary.acceptancePassCount} pass, ${pack.summary.acceptanceWarnCount} warn, ${pack.summary.acceptanceFailCount} fail
+- Open remediation actions: ${pack.summary.openRemediationActions}
+- Completed remediation actions: ${pack.summary.completedRemediationActions}
+- Remediation events: ${pack.summary.remediationEventCount}
+- Sources: ${pack.summary.sourceCount}
+- Missing evidence: ${pack.summary.missingEvidenceCount}
+- Approved claims: ${pack.summary.approvedClaimCount}
+- Rejected claims: ${pack.summary.rejectedClaimCount}
+- Lineage events: ${pack.summary.lineageEventCount}
+- Decision deltas: ${pack.summary.deltaCount}
+- Key artifacts: ${pack.summary.artifactCount}
+
+## Review Sections
+
+${pack.sections.map(renderDecisionHandoffReviewSection).join("\n\n")}
+
+## Export Links
+
+- Handoff review pack: ${pack.exports.handoffReviewPackHref}
+- Decision record dossier: ${pack.exports.decisionRecordDossierHref}
+- Decision package: ${pack.exports.decisionPackageHref}
+- Reviewed memo: ${pack.exports.reviewedMemoHref}
+`;
+}
+
+function renderDecisionHandoffReviewSection(section: DecisionHandoffReviewSection): string {
+  return `### ${section.label}
+
+- Status: ${formatStatusText(section.status)}
+- Summary: ${section.summary}
+- Detail: ${section.detail}
+- Next action: ${section.nextAction}
+- Surface: ${section.href ?? "none"}
+
+Evidence:
+
+${markdownList(section.evidence)}`;
 }
 
 function compareRunBundles(

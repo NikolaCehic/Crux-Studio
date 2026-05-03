@@ -1,5 +1,53 @@
 # Trace Log
 
+## 2026-05-03T13:10:32+02:00 - Phase 22 Decision Handoff Review Pack
+
+Intent:
+
+- Implement the next productization phase under the required phase contract: full implementation, E2E-style workflow coverage, smoke validation, spec validation, durable artifacts, and next-phase handoff.
+- Add one final pre-export review pack that reconciles acceptance, remediation evidence, lineage, human review, source state, artifacts, and export links.
+- Apply the Impeccable product UI lens: `IMPECCABLE_PREFLIGHT: context=pass product=pass command_reference=pass shape=not_required image_gate=skipped:Phase 22 extends the established workbench with a derived handoff review surface, no separate visual concept or generated imagery is needed mutation=open`.
+
+Implemented:
+
+- Added `GET /api/projects/:projectId/handoff-review-pack`.
+- Added `GET /api/projects/:projectId/export/handoff-review-pack`.
+- Added `handoff-review-pack` to provider capability reporting.
+- Derived the handoff pack from the decision record dossier, acceptance gate, remediation plan, remediation evidence ledger, lineage, human review, source summary, and exportable artifacts.
+- Added review sections for decision summary, acceptance, sources, human review, remediation evidence, lineage, and artifacts.
+- Added Markdown handoff export with handoff status, review sections, remediation evidence, and export links.
+- Added Studio API types and fetch helpers for the handoff pack.
+- Added a `Decision handoff review` workbench panel with status, metrics, section checks, and export links.
+- Added a `Handoff` navigation item.
+- Expanded local smoke to validate handoff JSON and Markdown exports after remediation evidence validation.
+- Corrected memo-only local runs so missing optional input/report paths warn instead of blocking an otherwise exportable handoff.
+- Added `docs/PHASE_22_DECISION_HANDOFF_REVIEW_PACK_SPEC.md`.
+- Updated README, changelog, product context, product spec, UX spec, architecture spec, demo guide, productization plan, and phase execution protocol.
+
+Verification:
+
+- Red server and web expectations were written first for provider capability, handoff JSON, Markdown export, section coverage, summary fields, UI panel, and export link.
+- Focused server workflow test passed: `pnpm --filter @crux-studio/server test -- product-workflow`.
+- Focused web workflow test passed: `pnpm --filter @crux-studio/web test -- src/App.test.tsx`.
+- Server suite passed after artifact-status hardening: `pnpm --filter @crux-studio/server test`.
+- Full Studio verification passed: `pnpm verify`.
+- Local smoke passed against the local Crux Harness provider: `pnpm smoke:local`.
+- Final source-backed smoke job: `job-20260503111301-64b05e56`.
+- Final source-backed smoke run: `20260503T111301Z-how-should-a-support-team-reduce-first-response-`.
+- Final evidence base run: `20260503T111302Z-what-evidence-would-make-the-support-first-respo`.
+- Final evidence task: `task-6d229081-12-adversarial-scenario-remove-evidence`.
+- Final evidence closure rerun job: `job-20260503111302-950df19d`.
+- Final evidence closure rerun: `20260503T111302Z-what-evidence-would-make-the-support-first-respo-2`.
+- Final evidence closure result: task `resolved`, rerun source count `1`, delta direction `improved`, closed gap count `1`, remaining blocker count `0`, comparison differences `7`, delta package bytes `6441`, lineage event count `20`, lineage delta count `1`, dossier approved claims `1`, dossier source count `1`, dossier package bytes `6309`, acceptance status `needs_review`, acceptance score `0.91`, acceptance checks `6 pass`, `2 warn`, `0 fail`, remediation status `action_required`, remediation actions `2`, remediation blocking actions `0`, remediation warning actions `2`, remediation ledger events `2`, remediation ledger completed actions `1`, handoff status `needs_review`, handoff sections `7`, handoff package bytes `4894`.
+- Refreshed README screenshots:
+  - `docs/assets/crux-studio-workbench.png`
+  - `docs/assets/crux-studio-review-compare.png`
+
+Result:
+
+- Phase 22 is done.
+- Next phase: Phase 23 Local Decision Archive Snapshot.
+
 ## 2026-05-03T12:44:32+02:00 - Phase 21 Remediation Evidence Ledger
 
 Intent:

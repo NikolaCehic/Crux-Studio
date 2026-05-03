@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.19.0 - 2026-05-03
+
+- Added a project-level decision handoff review pack.
+- Added `GET /api/projects/:projectId/handoff-review-pack`.
+- Added `GET /api/projects/:projectId/export/handoff-review-pack`.
+- Added `handoff-review-pack` to provider capability reporting.
+- Handoff packs derive from the decision record, acceptance gate, remediation plan, remediation evidence ledger, lineage, source summary, human review, and artifact links.
+- Studio now renders a `Decision handoff review` workbench panel with final status, summary metrics, section checks, and export links.
+- Expanded local smoke to validate handoff pack JSON and Markdown export after the full evidence-closure workflow.
+- Memo-only local runs now warn on missing optional input or report paths instead of blocking an exportable handoff.
+- Added the Phase 22 decision handoff review pack spec artifact.
+
 ## 0.18.0 - 2026-05-03
 
 - Added a local remediation evidence ledger for guided remediation activity.

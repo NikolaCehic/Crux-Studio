@@ -235,6 +235,7 @@ describe("Studio product workflow API", () => {
     expect(providers.json().providers[0].capabilities).toContain("agents");
     expect(providers.json().providers[0].capabilities).toContain("acceptance-gate");
     expect(providers.json().providers[0].capabilities).toContain("remediation-plan");
+    expect(providers.json().providers[0].capabilities).toContain("handoff-review-pack");
   });
 
   it("turns evidence gaps into source tasks that can be resolved, rerun, and compared", async () => {
@@ -777,6 +778,68 @@ describe("Studio product workflow API", () => {
     expect(ledgerDossierExportResponse.body).toContain("## Remediation Evidence Ledger");
     expect(ledgerDossierExportResponse.body).toContain("Events: 3");
     expect(ledgerDossierExportResponse.body).toContain(sourceAction.label);
+
+    const handoffPackResponse = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/handoff-review-pack`,
+    });
+    expect(handoffPackResponse.statusCode).toBe(200);
+    const handoffPack = handoffPackResponse.json();
+    expect(handoffPack).toEqual(
+      expect.objectContaining({
+        projectId: project.id,
+        projectName: "Support Ops",
+        title: "Decision Handoff Review Pack",
+        latestRunId: completedJob.run.runId,
+        status: "ready",
+        label: "Ready for handoff",
+        recommendedAction: "Export handoff pack and decision record.",
+        summary: expect.objectContaining({
+          acceptanceScore: 1,
+          openRemediationActions: 0,
+          completedRemediationActions: 1,
+          remediationEventCount: 3,
+          approvedClaimCount: 1,
+          sourceCount: 1,
+          lineageEventCount: lineage.events.length,
+        }),
+        exports: expect.objectContaining({
+          handoffReviewPackHref: `/api/projects/${project.id}/export/handoff-review-pack`,
+          decisionRecordDossierHref: `/api/projects/${project.id}/export/decision-record-dossier`,
+          decisionPackageHref: `/api/runs/${completedJob.run.runId}/export/decision-package`,
+          reviewedMemoHref: `/api/runs/${completedJob.run.runId}/export/reviewed-memo`,
+        }),
+      }),
+    );
+    expect(handoffPack.sections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "acceptance", status: "pass" }),
+        expect.objectContaining({ id: "sources", status: "pass" }),
+        expect.objectContaining({ id: "human_review", status: "pass" }),
+        expect.objectContaining({
+          id: "remediation",
+          status: "pass",
+          evidence: expect.arrayContaining([expect.stringContaining(sourceAction.label)]),
+        }),
+        expect.objectContaining({ id: "lineage", status: "pass" }),
+        expect.objectContaining({ id: "artifacts", status: "pass" }),
+      ]),
+    );
+
+    const handoffExportResponse = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/export/handoff-review-pack`,
+    });
+    expect(handoffExportResponse.statusCode).toBe(200);
+    expect(handoffExportResponse.headers["content-type"]).toContain("text/markdown");
+    expect(handoffExportResponse.headers["content-disposition"]).toContain("handoff-review-pack");
+    expect(handoffExportResponse.body).toContain("# Crux Decision Handoff Review Pack");
+    expect(handoffExportResponse.body).toContain("## Handoff Status");
+    expect(handoffExportResponse.body).toContain("Ready for handoff");
+    expect(handoffExportResponse.body).toContain("## Review Sections");
+    expect(handoffExportResponse.body).toContain("Remediation evidence");
+    expect(handoffExportResponse.body).toContain(sourceAction.label);
+    expect(handoffExportResponse.body).toContain("## Export Links");
   });
 });
 

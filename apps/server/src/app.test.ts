@@ -1,4 +1,4 @@
-import { MockCruxProvider, type AskInput, type CruxProvider, type RunBundle, type RunSummary } from "@crux-studio/crux-provider";
+import { MockCruxProvider, type AskInput, type CruxProvider, type RunBundle, type RunPaths, type RunSummary } from "@crux-studio/crux-provider";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -358,6 +358,65 @@ describe("Studio run API", () => {
     expect(unsafe.statusCode).toBe(404);
   });
 
+  it("keeps handoff review non-blocking when memo export exists but optional artifact paths are missing", async () => {
+    const provider = new MemoOnlyArtifactProvider();
+    const app = buildServer({ provider });
+    apps.push(app);
+
+    const projectResponse = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: { name: "Memo-only Handoff" },
+    });
+    const project = projectResponse.json();
+
+    const sourcePackResponse = await app.inject({
+      method: "POST",
+      url: "/api/source-packs",
+      payload: {
+        projectId: project.id,
+        name: "Memo evidence",
+        files: [
+          {
+            name: "evidence.md",
+            content: "Source-backed evidence keeps this handoff from being blocked by source coverage.",
+          },
+        ],
+      },
+    });
+    const sourcePack = sourcePackResponse.json();
+
+    const runResponse = await app.inject({
+      method: "POST",
+      url: "/api/runs/ask",
+      payload: {
+        projectId: project.id,
+        sourcePackId: sourcePack.id,
+        question: "Should this memo-only run be shareable?",
+        sourcePolicy: "hybrid",
+      },
+    });
+    expect(runResponse.statusCode).toBe(201);
+
+    const handoffResponse = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/handoff-review-pack`,
+    });
+    expect(handoffResponse.statusCode).toBe(200);
+    const handoffPack = handoffResponse.json();
+    expect(handoffPack.status).not.toBe("blocked");
+    expect(handoffPack.sections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "artifacts",
+          status: "warn",
+          detail: "Memo export is ready; optional input or report paths are missing.",
+          nextAction: "Export the handoff pack and decision record.",
+        }),
+      ]),
+    );
+  });
+
   it("rejects empty questions before reaching the provider", async () => {
     const provider = new MockCruxProvider();
     const app = buildServer({ provider });
@@ -428,6 +487,41 @@ class DeferredCruxProvider implements CruxProvider {
 
     next.reject(error);
   }
+}
+
+class MemoOnlyArtifactProvider implements CruxProvider {
+  private readonly mock = new MockCruxProvider({
+    now: () => "2026-05-01T10:00:00.000Z",
+  });
+
+  async ask(input: AskInput): Promise<RunSummary> {
+    return stripToMemoArtifact(await this.mock.ask(input));
+  }
+
+  async listRuns(): Promise<RunSummary[]> {
+    return (await this.mock.listRuns()).map(stripToMemoArtifact);
+  }
+
+  async getRun(runId: string): Promise<RunBundle> {
+    const bundle = await this.mock.getRun(runId);
+    return {
+      ...bundle,
+      paths: memoOnlyPaths(bundle.paths),
+    };
+  }
+}
+
+function stripToMemoArtifact(run: RunSummary): RunSummary {
+  return {
+    ...run,
+    paths: memoOnlyPaths(run.paths),
+  };
+}
+
+function memoOnlyPaths(paths: RunPaths): RunPaths {
+  return {
+    decisionMemo: paths.decisionMemo,
+  };
 }
 
 async function waitForJob(

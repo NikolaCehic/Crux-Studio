@@ -331,6 +331,28 @@ async function main() {
   if (!dossierPackageWithLedger.includes("## Remediation Evidence Ledger")) {
     throw new Error("Decision record dossier package is missing remediation ledger evidence.");
   }
+  const handoffPack = await getJson(`${serverUrl}/api/projects/${project.id}/handoff-review-pack`);
+  if (!["ready", "needs_review"].includes(handoffPack.status)) {
+    throw new Error(`Handoff review pack should not be blocked after evidence closure: ${JSON.stringify(handoffPack)}`);
+  }
+  if (!Array.isArray(handoffPack.sections) || handoffPack.sections.length < 6) {
+    throw new Error(`Handoff review pack returned too few sections: ${JSON.stringify(handoffPack.sections)}`);
+  }
+  if (handoffPack.summary?.remediationEventCount < remediationLedger.summary.eventCount) {
+    throw new Error(`Handoff review pack lost remediation evidence: ${JSON.stringify(handoffPack.summary)}`);
+  }
+  const handoffPackage = await getText(`${serverUrl}/api/projects/${project.id}/export/handoff-review-pack`);
+  for (const expectedText of [
+    "# Crux Decision Handoff Review Pack",
+    "## Handoff Status",
+    "## Review Sections",
+    "Remediation evidence",
+    "## Export Links",
+  ]) {
+    if (!handoffPackage.includes(expectedText)) {
+      throw new Error(`Handoff review package is missing expected text: ${expectedText}`);
+    }
+  }
 
   console.log(JSON.stringify({
     ok: health.ok === true,
@@ -387,6 +409,9 @@ async function main() {
       remediationWarningActions: remediationPlan.summary.warningActions,
       remediationLedgerEventCount: remediationLedger.summary.eventCount,
       remediationLedgerCompletedActions: remediationLedger.summary.completedActionCount,
+      handoffStatus: handoffPack.status,
+      handoffSectionCount: handoffPack.sections.length,
+      handoffPackageBytes: handoffPackage.length,
     },
   }, null, 2));
 }

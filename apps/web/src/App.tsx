@@ -18,6 +18,7 @@ import {
   Ban,
   Boxes,
   Check,
+  ClipboardCheck,
   CircleCheck,
   CircleDashed,
   CircleX,
@@ -68,6 +69,7 @@ import {
   exportDecisionDeltaPackage,
   getProjectAcceptanceGate,
   getProjectDecisionRecord,
+  getProjectHandoffReviewPack,
   getRunJob,
   getProjectLineage,
   getProjectRemediationLedger,
@@ -87,6 +89,7 @@ import {
   reviewClaim,
   startRunJob,
   type DecisionAcceptanceGate,
+  type DecisionHandoffReviewPack,
   type DecisionRecordDossier,
   type DecisionLineage,
   type DecisionLineageEvent,
@@ -180,6 +183,7 @@ const navItems = [
   { href: "#memo", icon: NotebookText, label: "Current run" },
   { href: "#acceptance", icon: ShieldCheck, label: "Gate" },
   { href: "#remediation", icon: SearchCheck, label: "Plan" },
+  { href: "#handoff", icon: ClipboardCheck, label: "Handoff" },
   { href: "#lineage", icon: GitBranch, label: "Lineage" },
   { href: "#artifacts", icon: Boxes, label: "Artifacts" },
   { href: "#trace", icon: SquareActivity, label: "Trace" },
@@ -209,6 +213,7 @@ export function App() {
   const [acceptanceGate, setAcceptanceGate] = useState<DecisionAcceptanceGate | null>(null);
   const [remediationPlan, setRemediationPlan] = useState<DecisionRemediationPlan | null>(null);
   const [remediationLedger, setRemediationLedger] = useState<DecisionRemediationLedger | null>(null);
+  const [handoffReviewPack, setHandoffReviewPack] = useState<DecisionHandoffReviewPack | null>(null);
   const [activeRemediationGuide, setActiveRemediationGuide] = useState<ActiveRemediationGuide | null>(null);
   const [jobs, setJobs] = useState<RunJob[]>([]);
   const [activeJob, setActiveJob] = useState<RunJob | null>(null);
@@ -221,12 +226,14 @@ export function App() {
   const [isLoadingAcceptanceGate, setIsLoadingAcceptanceGate] = useState(false);
   const [isLoadingRemediationPlan, setIsLoadingRemediationPlan] = useState(false);
   const [isLoadingRemediationLedger, setIsLoadingRemediationLedger] = useState(false);
+  const [isLoadingHandoffReviewPack, setIsLoadingHandoffReviewPack] = useState(false);
   const [isExportingDelta, setIsExportingDelta] = useState(false);
   const lineageRequestId = useRef(0);
   const decisionRecordRequestId = useRef(0);
   const acceptanceGateRequestId = useRef(0);
   const remediationPlanRequestId = useRef(0);
   const remediationLedgerRequestId = useRef(0);
+  const handoffReviewPackRequestId = useRef(0);
   const recordedRemediationOutcomeKeys = useRef<Set<string>>(new Set());
 
   const selectedRun = bundle ?? run;
@@ -331,6 +338,7 @@ export function App() {
     void refreshAcceptanceGate(selectedProjectId);
     void refreshRemediationPlan(selectedProjectId);
     void refreshRemediationLedger(selectedProjectId);
+    void refreshHandoffReviewPack(selectedProjectId);
     setActiveRemediationGuide(null);
     recordedRemediationOutcomeKeys.current.clear();
   }, [selectedProjectId]);
@@ -340,7 +348,14 @@ export function App() {
       return;
     }
 
-    if (acceptanceGate && remediationPlan && remediationLedger && decisionRecord && (lineage?.summary.runCount ?? 0) > 0) {
+    if (
+      acceptanceGate &&
+      remediationPlan &&
+      remediationLedger &&
+      handoffReviewPack &&
+      decisionRecord &&
+      (lineage?.summary.runCount ?? 0) > 0
+    ) {
       return;
     }
 
@@ -353,6 +368,9 @@ export function App() {
       }
       if (!remediationLedger && !isLoadingRemediationLedger) {
         void refreshRemediationLedger(selectedProjectId);
+      }
+      if (!handoffReviewPack && !isLoadingHandoffReviewPack) {
+        void refreshHandoffReviewPack(selectedProjectId);
       }
       if (!decisionRecord && !isLoadingDecisionRecord) {
         void refreshDecisionRecord(selectedProjectId);
@@ -370,6 +388,8 @@ export function App() {
     isLoadingRemediationPlan,
     remediationLedger,
     isLoadingRemediationLedger,
+    handoffReviewPack,
+    isLoadingHandoffReviewPack,
     decisionRecord,
     isLoadingDecisionRecord,
     isLoadingLineage,
@@ -612,6 +632,33 @@ export function App() {
     }
   }
 
+  async function refreshHandoffReviewPack(projectId: string) {
+    const requestId = handoffReviewPackRequestId.current + 1;
+    handoffReviewPackRequestId.current = requestId;
+
+    if (!projectId) {
+      setHandoffReviewPack(null);
+      setIsLoadingHandoffReviewPack(false);
+      return;
+    }
+
+    setIsLoadingHandoffReviewPack(true);
+    try {
+      const nextHandoffReviewPack = await getProjectHandoffReviewPack(projectId);
+      if (handoffReviewPackRequestId.current === requestId) {
+        setHandoffReviewPack(nextHandoffReviewPack);
+      }
+    } catch {
+      if (handoffReviewPackRequestId.current === requestId) {
+        setHandoffReviewPack(null);
+      }
+    } finally {
+      if (handoffReviewPackRequestId.current === requestId) {
+        setIsLoadingHandoffReviewPack(false);
+      }
+    }
+  }
+
   async function refreshProjectDecisionState(projectId: string) {
     await Promise.all([
       refreshLineage(projectId),
@@ -619,6 +666,7 @@ export function App() {
       refreshAcceptanceGate(projectId),
       refreshRemediationPlan(projectId),
       refreshRemediationLedger(projectId),
+      refreshHandoffReviewPack(projectId),
     ]);
   }
 
@@ -845,6 +893,7 @@ export function App() {
       setRemediationLedger((current) =>
         appendRemediationLedgerEvent(current, event, selectedProject?.name ?? remediationPlan.projectName),
       );
+      void refreshHandoffReviewPack(selectedProjectId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Remediation ledger event failed to record.");
     }
@@ -958,7 +1007,7 @@ export function App() {
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-tight">Crux Studio</h1>
             <p className="font-mono text-[0.72rem] text-muted-foreground">
-              v0.18 · workspace
+              v0.19 · workspace
             </p>
           </div>
         </div>
@@ -967,7 +1016,7 @@ export function App() {
           <p className="px-2 font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
             Workspace
           </p>
-          <div className="grid grid-cols-2 gap-1 sm:grid-cols-7 lg:grid-cols-1">
+          <div className="grid grid-cols-2 gap-1 sm:grid-cols-8 lg:grid-cols-1">
             {navItems.map((item) => (
               <Button
                 asChild
@@ -1167,9 +1216,11 @@ export function App() {
             isLoadingAcceptanceGate={isLoadingAcceptanceGate}
             isLoadingBundle={isLoadingBundle}
             isLoadingDecisionRecord={isLoadingDecisionRecord}
+            isLoadingHandoffReviewPack={isLoadingHandoffReviewPack}
             isLoadingLineage={isLoadingLineage}
             isLoadingRemediationLedger={isLoadingRemediationLedger}
             isLoadingRemediationPlan={isLoadingRemediationPlan}
+            handoffReviewPack={handoffReviewPack}
             lineage={lineage}
             remediationGuide={activeRemediationGuide}
             remediationGuideOutcome={remediationGuideOutcome}
@@ -1700,9 +1751,11 @@ function MemoPanel({
   isLoadingAcceptanceGate,
   isLoadingBundle,
   isLoadingDecisionRecord,
+  isLoadingHandoffReviewPack,
   isLoadingLineage,
   isLoadingRemediationLedger,
   isLoadingRemediationPlan,
+  handoffReviewPack,
   lineage,
   remediationGuide,
   remediationGuideOutcome,
@@ -1731,9 +1784,11 @@ function MemoPanel({
   isLoadingAcceptanceGate: boolean;
   isLoadingBundle: boolean;
   isLoadingDecisionRecord: boolean;
+  isLoadingHandoffReviewPack: boolean;
   isLoadingLineage: boolean;
   isLoadingRemediationLedger: boolean;
   isLoadingRemediationPlan: boolean;
+  handoffReviewPack: DecisionHandoffReviewPack | null;
   lineage: DecisionLineage | null;
   remediationGuide: ActiveRemediationGuide | null;
   remediationGuideOutcome: RemediationGuideOutcome | null;
@@ -1818,6 +1873,10 @@ function MemoPanel({
             <RemediationLedgerPanel
               isLoading={isLoadingRemediationLedger}
               ledger={remediationLedger}
+            />
+            <HandoffReviewPackPanel
+              handoffReviewPack={handoffReviewPack}
+              isLoading={isLoadingHandoffReviewPack}
             />
             <DecisionRecordPanel
               decisionRecord={decisionRecord}
@@ -2997,6 +3056,173 @@ function RemediationLedgerEventBadge({ eventType }: { eventType: RemediationLedg
   return (
     <Badge className={cn("shrink-0", classes[eventType])} variant="outline">
       {formatStatusText(eventType)}
+    </Badge>
+  );
+}
+
+function HandoffReviewPackPanel({
+  handoffReviewPack,
+  isLoading,
+}: {
+  handoffReviewPack: DecisionHandoffReviewPack | null;
+  isLoading: boolean;
+}) {
+  const visibleSections = handoffReviewPack?.sections ?? [];
+
+  return (
+    <section
+      aria-label="Decision handoff review"
+      className="mt-4 grid gap-4 rounded-lg border bg-muted/20 p-4 text-sm"
+      id="handoff"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+            <ClipboardCheck className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-mono text-[0.68rem] font-semibold uppercase text-muted-foreground">
+              Final review
+            </p>
+            <h3 className="mt-1 font-semibold">Decision handoff review</h3>
+            <p className="mt-1 text-muted-foreground">
+              One pre-export check across acceptance, remediation, lineage, review, sources, and artifacts.
+            </p>
+          </div>
+        </div>
+        {handoffReviewPack ? (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <HandoffStatusBadge status={handoffReviewPack.status} />
+            <Button asChild size="sm" variant="outline">
+              <a href={handoffReviewPack.exports.handoffReviewPackHref}>
+                <Download className="size-3.5" />
+                Export handoff pack
+              </a>
+            </Button>
+          </div>
+        ) : null}
+      </div>
+
+      {isLoading ? (
+        <div className="grid gap-2">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-24" />
+        </div>
+      ) : !handoffReviewPack ? (
+        <p className="rounded-md border border-dashed bg-background p-3 text-muted-foreground">
+          Select a project with a decision record to assemble the handoff review.
+        </p>
+      ) : (
+        <>
+          <div className="grid gap-3 rounded-md border bg-background p-3 2xl:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.9fr)]">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="font-semibold">{handoffReviewPack.label}</h4>
+                <Badge variant="outline">
+                  {formatConfidence(handoffReviewPack.summary.acceptanceScore)} gate
+                </Badge>
+              </div>
+              <p className="mt-1 text-muted-foreground">{handoffReviewPack.recommendedAction}</p>
+            </div>
+            <dl className="grid grid-cols-2 gap-2">
+              <RemediationMetric
+                label="Open"
+                value={String(handoffReviewPack.summary.openRemediationActions)}
+              />
+              <RemediationMetric
+                label="Complete"
+                value={String(handoffReviewPack.summary.completedRemediationActions)}
+              />
+              <RemediationMetric
+                label="Review"
+                value={`${handoffReviewPack.summary.approvedClaimCount}/${handoffReviewPack.summary.rejectedClaimCount}`}
+              />
+              <RemediationMetric
+                label="Artifacts"
+                value={String(handoffReviewPack.summary.artifactCount)}
+              />
+            </dl>
+          </div>
+
+          <ol className="grid gap-2">
+            {visibleSections.map((section) => (
+              <HandoffReviewSectionItem section={section} key={section.id} />
+            ))}
+          </ol>
+
+          <div className="flex flex-wrap gap-2 border-t pt-3">
+            <Button asChild size="sm" variant="outline">
+              <a href={handoffReviewPack.exports.decisionRecordDossierHref}>
+                <Download className="size-3.5" />
+                Dossier export
+              </a>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <a href={handoffReviewPack.exports.decisionPackageHref}>
+                <Download className="size-3.5" />
+                Run package
+              </a>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <a href={handoffReviewPack.exports.reviewedMemoHref}>
+                <Download className="size-3.5" />
+                Reviewed memo export
+              </a>
+            </Button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function HandoffReviewSectionItem({
+  section,
+}: {
+  section: DecisionHandoffReviewPack["sections"][number];
+}) {
+  return (
+    <li className="rounded-md border bg-background p-3">
+      <div className="grid gap-3 2xl:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="flex min-w-0 items-start gap-3">
+          <AcceptanceCheckIcon status={section.status} />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-semibold">{section.label}</p>
+              <Badge variant="outline">{formatStatusText(section.status)}</Badge>
+            </div>
+            <p className="mt-1 text-muted-foreground">{section.summary}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Next: {section.nextAction}</p>
+            {section.evidence.length ? (
+              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                Evidence: {section.evidence.slice(0, 2).join("; ")}
+              </p>
+            ) : null}
+          </div>
+        </div>
+        {section.href ? (
+          <Button asChild className="w-full 2xl:w-auto" size="sm" variant="outline">
+            <a href={section.href}>
+              <SearchCheck className="size-3.5" />
+              Open surface
+            </a>
+          </Button>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+function HandoffStatusBadge({ status }: { status: DecisionHandoffReviewPack["status"] }) {
+  const statusClasses: Record<DecisionHandoffReviewPack["status"], string> = {
+    ready: "border-emerald-300 bg-emerald-100 text-emerald-900",
+    needs_review: "border-amber-300 bg-amber-100 text-amber-950",
+    blocked: "border-red-300 bg-red-100 text-red-900",
+  };
+
+  return (
+    <Badge className={cn("shrink-0", statusClasses[status])} variant="outline">
+      {formatStatusText(status)}
     </Badge>
   );
 }

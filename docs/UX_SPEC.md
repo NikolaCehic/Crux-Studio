@@ -174,6 +174,7 @@ Capabilities:
 - preserve active action context while the user works
 - show whether a refreshed gate changed after the action began
 - show a remediation evidence ledger with action starts, workflow triggers, gate movement, completions, and dismissals
+- show a final handoff review pack before export that combines readiness, remediation evidence, lineage, review, sources, artifacts, and links
 
 ## Design Direction
 

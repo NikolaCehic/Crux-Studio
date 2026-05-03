@@ -222,7 +222,7 @@ The first implementation slice is Phase 2 plus the first part of Phase 3:
 
 ## Local-First Implementation Status
 
-Implemented in Studio v0.4 through v0.18:
+Implemented in Studio v0.4 through v0.19:
 
 - Phase 1: canonical demo questions are exposed through `/api/demos` and the ask panel.
 - Phase 2: the provider boundary carries readiness, Harness version, source summaries, bounded agents, source inventory, source chunks, and eval reports.
@@ -246,6 +246,7 @@ Implemented in Studio v0.4 through v0.18:
 - Phase 19: Studio v0.16 adds a project-level remediation planner that turns non-passing acceptance checks into prioritized next actions.
 - Phase 20: Studio v0.17 turns remediation actions into guided execution flows that prefill source intake, route claim review, trigger replay and comparison, and watch for gate movement.
 - Phase 21: Studio v0.18 adds a local remediation evidence ledger that records guided action starts, workflow triggers, gate movement, completions, and dismissals inside the decision record.
+- Phase 22: Studio v0.19 adds a decision handoff review pack that combines acceptance, remediation evidence, lineage, review, source state, artifacts, and export links before sharing.
 
 Still deferred:
 

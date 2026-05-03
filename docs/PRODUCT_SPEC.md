@@ -39,6 +39,7 @@ The correct UX is a Run Studio:
 8. Assemble a decision record that can be shared without reconstructing separate tabs.
 9. Follow acceptance-gate remediation actions without leaving the workbench context.
 10. Preserve remediation action evidence for the final handoff.
+11. Review one derived handoff pack before exporting or sharing the decision.
 
 ## Non-Goals
 
@@ -58,6 +59,7 @@ The correct UX is a Run Studio:
 6. Source gaps are product information, not error noise.
 7. The UI should help the user improve the analysis, not merely display it.
 8. Remediation evidence belongs in the decision record, not in memory only.
+9. Handoff should be derived from current artifacts so it cannot drift from the decision state.
 
 ## Main Entities
 
@@ -77,6 +79,7 @@ The correct UX is a Run Studio:
 - Remediation plan: prioritized next actions for non-passing acceptance checks.
 - Guided remediation: active UI state that routes a remediation action into the matching workflow and watches for gate movement.
 - Remediation evidence ledger: local audit trail of guided remediation starts, workflow triggers, gate movement, completions, and dismissals.
+- Handoff review pack: final derived review surface combining acceptance, remediation evidence, lineage, sources, human review, artifacts, and exports.
 
 ## Success Criteria
 

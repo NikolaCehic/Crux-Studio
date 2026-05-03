@@ -309,6 +309,56 @@ export type DecisionRemediationLedger = {
   events: RemediationLedgerEvent[];
 };
 
+export type DecisionHandoffReviewPack = {
+  projectId: string;
+  projectName: string;
+  title: "Decision Handoff Review Pack";
+  latestRunId: string;
+  status: "ready" | "needs_review" | "blocked";
+  label: string;
+  generatedAt: string;
+  recommendedAction: string;
+  summary: {
+    acceptanceScore: number;
+    acceptancePassCount: number;
+    acceptanceWarnCount: number;
+    acceptanceFailCount: number;
+    openRemediationActions: number;
+    completedRemediationActions: number;
+    remediationEventCount: number;
+    sourceCount: number;
+    missingEvidenceCount: number;
+    approvedClaimCount: number;
+    rejectedClaimCount: number;
+    lineageEventCount: number;
+    deltaCount: number;
+    artifactCount: number;
+  };
+  sections: Array<{
+    id:
+      | "decision"
+      | "acceptance"
+      | "sources"
+      | "human_review"
+      | "remediation"
+      | "lineage"
+      | "artifacts";
+    label: string;
+    status: "pass" | "warn" | "fail";
+    summary: string;
+    detail: string;
+    nextAction: string;
+    evidence: string[];
+    href?: string;
+  }>;
+  exports: {
+    handoffReviewPackHref: string;
+    decisionRecordDossierHref: string;
+    decisionPackageHref: string;
+    reviewedMemoHref: string;
+  };
+};
+
 export type ProviderRegistry = {
   providers: Array<{
     id: string;
@@ -412,6 +462,13 @@ export async function getProjectRemediationLedger(projectId: string): Promise<De
   return getJson(
     `/api/projects/${encodeURIComponent(projectId)}/remediation-ledger`,
     "Remediation ledger failed to load.",
+  );
+}
+
+export async function getProjectHandoffReviewPack(projectId: string): Promise<DecisionHandoffReviewPack> {
+  return getJson(
+    `/api/projects/${encodeURIComponent(projectId)}/handoff-review-pack`,
+    "Handoff review pack failed to load.",
   );
 }
 

@@ -144,6 +144,8 @@ GET    /api/projects/:projectId/acceptance-gate
 GET    /api/projects/:projectId/remediation-plan
 GET    /api/projects/:projectId/remediation-ledger
 POST   /api/projects/:projectId/remediation-ledger/events
+GET    /api/projects/:projectId/handoff-review-pack
+GET    /api/projects/:projectId/export/handoff-review-pack
 GET    /api/runs
 GET    /api/runs/:runId
 GET    /api/runs/:runId/artifacts/:artifact
@@ -174,6 +176,10 @@ Guided remediation execution is client-side orchestration over existing APIs. St
 `GET /api/projects/:projectId/remediation-ledger` returns the local evidence trail for guided remediation, including summary counts and recent events.
 
 `POST /api/projects/:projectId/remediation-ledger/events` records guided remediation evidence such as action starts, workflow triggers, gate movement, completions, and dismissals.
+
+`GET /api/projects/:projectId/handoff-review-pack` returns a final derived handoff review pack that combines the decision record, acceptance gate, remediation plan, remediation evidence ledger, lineage, human review, source state, and export links.
+
+`GET /api/projects/:projectId/export/handoff-review-pack` returns the handoff review pack as Markdown.
 
 ## Run Bundle Shape For UI
 
@@ -218,6 +224,7 @@ v0.1:
 - remediation plans derive prioritized next actions from the acceptance gate without storing duplicate task state
 - guided remediation execution routes plan actions through existing workflows and watches refreshed gate movement in client state
 - remediation ledger events persist guided remediation evidence and are included in decision record dossiers
+- handoff review packs derive final pre-export readiness from the decision record, gate, remediation plan, ledger, lineage, review, source state, and artifact links
 - no hosted database yet
 
 v0.2:
